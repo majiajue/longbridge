@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(source:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "WebFetch(domain:open.longbridge.com)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

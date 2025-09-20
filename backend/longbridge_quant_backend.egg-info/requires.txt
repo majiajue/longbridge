@@ -1,0 +1,6 @@
+fastapi<0.112,>=0.110
+uvicorn[standard]<0.28,>=0.27
+duckdb>=1.0
+cryptography>=42
+pydantic-settings>=2.2
+python-dotenv>=1.0

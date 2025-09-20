@@ -1,0 +1,21 @@
+[project]
+name = "longbridge-quant-backend"
+version = "0.1.0"
+description = "Minimal local backend for Longbridge quant system"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110,<0.112",
+    "uvicorn[standard]>=0.27,<0.28",
+    "websockets>=15.0",
+    "httptools>=0.6.0",
+    "uvloop>=0.20.0; sys_platform != 'win32'",
+    "watchfiles>=1.0",
+    "duckdb>=1.0",
+    "cryptography>=42",
+    "pydantic-settings>=2.2",
+    "python-dotenv>=1.0"
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

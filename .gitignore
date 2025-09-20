@@ -1,0 +1,18 @@
+# Python
+backend/.venv/
+__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Data files
+backend/data/
+data/
+*.duckdb
+*.duckdb.wal
+
+# Env files
+*.env
+backend/data/encryption.key
