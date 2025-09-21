@@ -86,7 +86,7 @@ def sync_history_candlesticks(
     period: str = "day",
     adjust_type: str = "no_adjust",
     count: int = 120,
-    forward: bool = True,
+    forward: bool = False,  # Changed to False to get historical data
 ) -> Dict[str, int]:
     if count <= 0:
         raise ValueError("count 必须大于 0")
@@ -112,7 +112,7 @@ def sync_history_candlesticks(
         raise ValueError(f"不支持的复权类型: {adjust_type}") from exc
 
     try:
-        from longport.openapi import Period, AdjustType, TradeSessions
+        from longport.openapi import Period, AdjustType
     except ModuleNotFoundError as exc:  # pragma: no cover - depends on environment
         raise LongbridgeDependencyMissing(
             "未找到 longport Python SDK，请先运行 `pip install longport`。"
@@ -126,17 +126,32 @@ def sync_history_candlesticks(
     with _quote_context(creds) as ctx:
         for symbol in symbol_list:
             try:
-                candles = ctx.history_candlesticks_by_offset(
+                # Use candlesticks method which can fetch up to 1000 records
+                candles = ctx.candlesticks(
                     symbol,
                     period_enum,
-                    adjust_enum,
-                    forward,
                     count,
-                    trade_sessions=TradeSessions.Intraday,
+                    adjust_enum,
                 )
+
+                # Log how many candles we got
+                logger.info(f"Got {len(candles)} candles for {symbol} using candlesticks()")
+
+                # If no data from candlesticks, try history_candlesticks_by_offset as fallback
+                if not candles:
+                    logger.info(f"No data from candlesticks(), trying history_candlesticks_by_offset()")
+                    candles = ctx.history_candlesticks_by_offset(
+                        symbol,
+                        period_enum,
+                        adjust_enum,
+                        forward,
+                        count,
+                    )
+                    logger.info(f"Got {len(candles)} candles for {symbol} using history_candlesticks_by_offset()")
             except Exception as exc:
                 raise LongbridgeAPIError(f"{symbol}: {exc}") from exc
             inserted = store_candlesticks(symbol, candles)
+            logger.info(f"Inserted {inserted} records for {symbol}")
             results[symbol] = inserted
 
     return results

@@ -55,13 +55,32 @@ def health() -> dict[str, str]:
 
 @app.websocket("/ws/quotes")
 async def quotes_websocket(websocket: WebSocket) -> None:
+    import json
+    from datetime import datetime
+
+    def json_serializer(obj):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        # Handle enum-like objects and other non-serializable types
+        if hasattr(obj, 'name'):
+            return obj.name
+        if hasattr(obj, 'value'):
+            return obj.value
+        # Convert to string as last resort
+        return str(obj)
+
     await websocket.accept()
     queue = quote_stream_manager.add_listener()
     try:
         while True:
             payload = await queue.get()
-            await websocket.send_json(payload)
+            # Use custom serializer to handle datetime objects
+            json_str = json.dumps(payload, default=json_serializer)
+            await websocket.send_text(json_str)
     except WebSocketDisconnect:
         pass
+    except Exception as e:
+        logger.error(f"WebSocket error: {e}")
     finally:
         quote_stream_manager.remove_listener(queue)

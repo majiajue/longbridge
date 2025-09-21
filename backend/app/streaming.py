@@ -301,9 +301,19 @@ class QuoteStreamManager:
 
     # ------------------------------------------------------------------
     def _normalize_quote(self, symbol: str, event: Any) -> Dict[str, Any]:
+        # Normalize symbol format (e.g., "5.HK" -> "0005.HK")
+        normalized_symbol = symbol
+        if symbol.endswith(".HK"):
+            parts = symbol.split(".")
+            if parts[0].isdigit():
+                # Pad with zeros to make it 4 digits for HK stocks
+                normalized_symbol = f"{int(parts[0]):04d}.HK"
+
         sequence = getattr(event, "sequence", None)
         timestamp = getattr(event, "timestamp", None)
         ts_iso: Optional[str] = None
+
+        # Use current time if timestamp is not provided
         if timestamp:
             try:
                 ts_dt = datetime.fromtimestamp(timestamp, tz=timezone.utc)
@@ -312,22 +322,46 @@ class QuoteStreamManager:
                     self._last_quote_at = ts_dt
             except Exception:  # pragma: no cover - guard
                 ts_iso = None
+        else:
+            # Use current time as fallback
+            ts_dt = datetime.now(timezone.utc)
+            ts_iso = ts_dt.isoformat()
+            with self._lock:
+                self._last_quote_at = ts_dt
+
+        # Get price values
+        last_done = _safe_float(getattr(event, "last_done", None))
+        prev_close = _safe_float(getattr(event, "prev_close", None))
+
+        # Calculate change values
+        change_value = 0.0
+        change_rate = 0.0
+        if last_done is not None and prev_close is not None and prev_close != 0:
+            change_value = last_done - prev_close
+            change_rate = (change_value / prev_close) * 100
+
+        # Convert timestamp to Unix timestamp for frontend compatibility
+        timestamp_unix = int(ts_dt.timestamp()) if ts_dt else int(datetime.now(timezone.utc).timestamp())
+
         data = {
             "type": "quote",
-            "symbol": symbol,
+            "symbol": normalized_symbol,
             "sequence": sequence,
-            "last_done": _safe_float(getattr(event, "last_done", None)),
+            "last_done": last_done,
+            "prev_close": prev_close,
             "open": _safe_float(getattr(event, "open", None)),
             "high": _safe_float(getattr(event, "high", None)),
             "low": _safe_float(getattr(event, "low", None)),
-            "timestamp": ts_iso,
+            "timestamp": timestamp_unix,  # Use Unix timestamp for frontend
             "volume": _safe_float(getattr(event, "volume", None)),
             "turnover": _safe_float(getattr(event, "turnover", None)),
             "current_volume": _safe_float(getattr(event, "current_volume", None)),
             "current_turnover": _safe_float(getattr(event, "current_turnover", None)),
-            "trade_status": getattr(event, "trade_status", None),
-            "trade_session": getattr(event, "trade_session", None),
+            "trade_status": str(getattr(event, "trade_status", None)),
+            "trade_session": str(getattr(event, "trade_session", None)),
             "tag": getattr(event, "tag", None),
+            "change_value": change_value,
+            "change_rate": change_rate,
         }
         return data
 

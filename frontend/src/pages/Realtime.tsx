@@ -1,36 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  alpha,
-  Box,
-  Button,
-  Card,
-  Chip,
-  CircularProgress,
-  Container,
-  Fade,
-  Grid,
-  Paper,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from "@mui/material";
-import {
-  TrendingUp as TrendingUpIcon,
-  AccountBalanceWallet as WalletIcon,
-  Paid as PaidIcon,
-  ShowChart as ChartIcon,
-  AttachMoney as MoneyIcon,
-  AccountBalance as BankIcon,
-  CreditCard as CreditIcon,
-  Refresh as RefreshIcon,
-} from "@mui/icons-material";
-
 import StatusSnackbar from "../components/StatusSnackbar";
 import {
   TickItem,
@@ -115,116 +83,53 @@ function KpiCard({
   value,
   subtitle,
   icon,
-  color = "primary",
+  color = "blue",
   isRefreshing = false,
 }: {
   title: string;
   value: string;
   subtitle?: string;
-  icon: React.ReactNode;
-  color?: "primary" | "success" | "error" | "warning" | "info";
+  icon: string;
+  color?: "blue" | "green" | "red" | "yellow" | "purple" | "gray";
   isRefreshing?: boolean;
 }) {
+  const colorClasses = {
+    blue: "from-blue-500 to-blue-600 text-blue-600 bg-blue-50 border-blue-200",
+    green: "from-green-500 to-green-600 text-green-600 bg-green-50 border-green-200",
+    red: "from-red-500 to-red-600 text-red-600 bg-red-50 border-red-200",
+    yellow: "from-yellow-500 to-yellow-600 text-yellow-600 bg-yellow-50 border-yellow-200",
+    purple: "from-purple-500 to-purple-600 text-purple-600 bg-purple-50 border-purple-200",
+    gray: "from-gray-500 to-gray-600 text-gray-600 bg-gray-50 border-gray-200",
+  };
+
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        borderRadius: 3,
-        border: (theme) => `1px solid ${alpha(theme.palette[color].main, 0.2)}`,
-        background: (theme) => alpha(theme.palette[color].main, 0.06),
-        p: 2.5,
-        height: '100%',
-        display: "flex",
-        alignItems: "center",
-        gap: 2,
-        position: 'relative',
-        overflow: 'hidden',
-        transition: 'all 0.3s ease',
-        transform: isRefreshing ? 'scale(0.98)' : 'scale(1)',
-        opacity: isRefreshing ? 0.8 : 1,
-        '&:hover': {
-          transform: 'translateY(-2px)',
-          boxShadow: (theme) => `0 4px 20px ${alpha(theme.palette[color].main, 0.2)}`,
-        }
-      }}
+    <div
+      className={`
+        card p-4 h-full flex items-center gap-4 relative overflow-hidden
+        transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl
+        ${isRefreshing ? "scale-[0.98] opacity-80" : "scale-100 opacity-100"}
+      `}
     >
       {isRefreshing && (
-        <>
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: '100%',
-              bgcolor: 'white',
-              opacity: 0.3,
-              animation: 'flash 0.6s ease',
-              '@keyframes flash': {
-                '0%': { opacity: 0 },
-                '50%': { opacity: 0.3 },
-                '100%': { opacity: 0 },
-              },
-            }}
-          />
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 3,
-              bgcolor: color + '.main',
-              animation: 'loading 1s infinite linear',
-              '@keyframes loading': {
-                '0%': { transform: 'translateX(-100%)' },
-                '100%': { transform: 'translateX(100%)' },
-              },
-            }}
-          />
-        </>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary-500 to-primary-600 animate-pulse" />
       )}
-      <Box
-        sx={{
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          background: (theme) => alpha(theme.palette[color].main, 0.12),
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          color: (theme) => theme.palette[color].main,
-          animation: isRefreshing ? 'rotate 1s linear infinite' : 'none',
-          '@keyframes rotate': {
-            '0%': { transform: 'rotate(0deg)' },
-            '100%': { transform: 'rotate(360deg)' },
-          },
-        }}
-      >
+      <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${colorClasses[color].split(" ")[0]} ${colorClasses[color].split(" ")[1]} flex items-center justify-center text-white text-2xl shadow-lg ${isRefreshing ? "animate-spin" : ""}`}>
         {icon}
-      </Box>
-      <Box sx={{ flex: 1 }}>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
+      </div>
+      <div className="flex-1">
+        <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide font-medium">
           {title}
-        </Typography>
-        <Typography
-          variant="h5"
-          sx={{
-            fontWeight: 700,
-            mb: 0.5,
-            transition: 'opacity 0.3s ease',
-            opacity: isRefreshing ? 0.5 : 1,
-          }}
-        >
+        </p>
+        <p className={`text-2xl font-bold text-gray-900 dark:text-white mt-1 transition-opacity duration-300 ${isRefreshing ? "opacity-50" : "opacity-100"}`}>
           {value}
-        </Typography>
+        </p>
         {subtitle && (
-          <Typography variant="caption" color="text.secondary">
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
             {subtitle}
-          </Typography>
+          </p>
         )}
-      </Box>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
@@ -260,27 +165,20 @@ export default function RealtimePage() {
   const refreshPortfolio = useCallback(async () => {
     setIsRefreshing(true);
     setPortfolioLoading(true);
-
-    // Add a small delay for animation effect
     await new Promise(resolve => setTimeout(resolve, 300));
 
     try {
       const res = await fetchPortfolioOverview();
       setPortfolioPositions(res.positions);
-
-      // Handle totals with day P&L
       const totals = res.totals as Totals;
       setPortfolioTotals({
         ...totals,
         day_pnl: totals.day_pnl || 0,
         day_pnl_percent: totals.day_pnl_percent || 0,
       });
-
-      // Handle account balance
       if ((res as any).account_balance) {
         setAccountBalance((res as any).account_balance);
       }
-
       if (!symbolQuery && res.positions.length) {
         setSymbolQuery(res.positions[0].symbol);
       }
@@ -345,8 +243,6 @@ export default function RealtimePage() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-
-        // Handle portfolio updates
         if (data.type === "portfolio_update") {
           const update = data as PortfolioUpdateEvent;
           setPortfolioPositions(update.positions);
@@ -358,29 +254,19 @@ export default function RealtimePage() {
           setAccountBalance(update.account_balance || {});
           return;
         }
-
-        // Handle status updates
         if (data.type === "status") {
           if (Array.isArray(data.subscribed)) {
             setStatusSubscribed(data.subscribed);
           }
           return;
         }
-
-        // Handle quote updates
         setEventLog((prev) => [data, ...prev].slice(0, logLimit));
         setPortfolioPositions((prev) => {
-          if (!prev.length) {
-            return prev;
-          }
+          if (!prev.length) return prev;
           const idx = prev.findIndex((item) => item.symbol === data.symbol);
-          if (idx === -1) {
-            return prev;
-          }
+          if (idx === -1) return prev;
           const lastPrice = data.last_done ?? prev[idx].last_price ?? null;
-          if (lastPrice === null) {
-            return prev;
-          }
+          if (lastPrice === null) return prev;
           const updated = [...prev];
           const current = { ...updated[idx] };
           current.last_price = lastPrice;
@@ -394,7 +280,6 @@ export default function RealtimePage() {
             ? ((lastPrice - entry) / entry) * 100 * direction
             : 0;
           updated[idx] = current;
-          // 保留后端 day_pnl/day_pnl_percent，不在增量行情时覆盖；总盈亏与市值本地重算
           setPortfolioTotals((prevTotals) => {
             const t = computeTotals(updated);
             return {
@@ -440,7 +325,6 @@ export default function RealtimePage() {
     }
   };
 
-  // Calculate aggregated values - USD only, strict mapping
   const usdBalance =
     accountBalance['USD'] ??
     (Object.entries(accountBalance).find(
@@ -448,533 +332,304 @@ export default function RealtimePage() {
     )?.[1] as any) ??
     null;
 
-  // 可用现金（优先 available_cash，其次 cash_balance/total_cash）
-  const totalCash: number =
-    (usdBalance?.available_cash ?? 0) as number;
-
-  // 融资欠款（优先 finance_used，其次 debit）
-  const totalFinanceUsed: number =
-    (usdBalance?.finance_used ?? usdBalance?.debit ?? 0) as number;
-
-  // 冻结资金
+  const totalCash: number = (usdBalance?.available_cash ?? 0) as number;
+  const totalFinanceUsed: number = (usdBalance?.finance_used ?? usdBalance?.debit ?? 0) as number;
   const frozenCash: number = (usdBalance?.frozen_cash ?? 0) as number;
-
-  // 总资产（现金 + 持仓市值），按你的口径要求
-  const displayTotalAssets: number =
-    (totalCash + portfolioTotals.market_value) as number;
+  const displayTotalAssets: number = (totalCash + portfolioTotals.market_value) as number;
 
   return (
-    <Container maxWidth="xl" sx={{ py: 4 }}>
-      <Stack spacing={3}>
-        {/* Header Card */}
-        <Paper elevation={2} sx={{
-          p: 3,
-          borderRadius: 3,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}>
-          <Box
-            sx={{
-              position: 'absolute',
-              top: 0,
-              right: 0,
-              width: 300,
-              height: 300,
-              borderRadius: '50%',
-              background: 'rgba(255,255,255,0.1)',
-              transform: 'translate(100px, -100px)',
-            }}
+    <div className="space-y-6 animate-fade-in">
+      {/* Header Card */}
+      <div className="card bg-gradient-to-br from-primary-600 to-primary-800 dark:from-primary-700 dark:to-primary-900 text-white p-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl transform translate-x-32 -translate-y-32" />
+        <div className="relative flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h2 className="text-3xl font-bold mb-2">投资组合概览</h2>
+            <p className="text-primary-100">
+              实时监控 · 自动更新 · {statusSubscribed.length} 只股票订阅
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`
+              px-3 py-1 rounded-full text-sm font-medium
+              ${socketStatus === "CONNECTED" ? "bg-green-500" : socketStatus === "ERROR" ? "bg-red-500" : "bg-gray-500"}
+              text-white shadow-lg
+            `}>
+              {socketStatus}
+            </span>
+            <button
+              onClick={refreshPortfolio}
+              disabled={portfolioLoading}
+              className="px-4 py-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white rounded-lg font-medium transition-all duration-200 disabled:opacity-50"
+            >
+              {portfolioLoading ? "刷新中..." : "🔄 刷新"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <KpiCard
+          title="总资产"
+          value={`$${formatCurrency(displayTotalAssets)}`}
+          subtitle="现金+持仓"
+          icon="💼"
+          color="blue"
+          isRefreshing={isRefreshing}
+        />
+        <KpiCard
+          title="现金"
+          value={`$${formatCurrency(totalCash)}`}
+          subtitle="可用资金"
+          icon="💵"
+          color="purple"
+          isRefreshing={isRefreshing}
+        />
+        <KpiCard
+          title="持仓市值"
+          value={`$${formatCurrency(portfolioTotals.market_value)}`}
+          subtitle={`成本: $${formatCurrency(portfolioTotals.cost)}`}
+          icon="📈"
+          color="green"
+          isRefreshing={isRefreshing}
+        />
+        <KpiCard
+          title="总盈亏"
+          value={`$${formatCurrency(portfolioTotals.pnl)}`}
+          subtitle={formatPercent(portfolioTotals.pnl_percent)}
+          icon="💰"
+          color={portfolioTotals.pnl >= 0 ? "green" : "red"}
+          isRefreshing={isRefreshing}
+        />
+        <KpiCard
+          title="当日盈亏"
+          value={`$${formatCurrency(portfolioTotals.day_pnl || 0)}`}
+          subtitle={formatPercent(portfolioTotals.day_pnl_percent || 0)}
+          icon="📊"
+          color={(portfolioTotals.day_pnl || 0) >= 0 ? "green" : "red"}
+          isRefreshing={isRefreshing}
+        />
+        <KpiCard
+          title="融资欠款"
+          value={`$${formatCurrency(totalFinanceUsed)}`}
+          subtitle="已用额度"
+          icon="💳"
+          color="yellow"
+          isRefreshing={isRefreshing}
+        />
+      </div>
+
+      {/* Account Balance Details */}
+      {usdBalance && Object.keys(usdBalance).length > 0 && (
+        <div className="card p-6 animate-slide-up">
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+            账户资金明细 (USD)
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">可用现金</p>
+              <p className="text-2xl font-bold text-blue-700 dark:text-blue-400">
+                ${formatCurrency(totalCash)}
+              </p>
+            </div>
+            <div className="p-4 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">融资欠款</p>
+              <p className="text-2xl font-bold text-orange-700 dark:text-orange-400">
+                ${formatCurrency(totalFinanceUsed || usdBalance?.debit || 0)}
+              </p>
+            </div>
+            <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">持仓市值</p>
+              <p className="text-2xl font-bold text-green-700 dark:text-green-400">
+                ${formatCurrency(portfolioTotals.market_value)}
+              </p>
+            </div>
+            <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">冻结资金</p>
+              <p className="text-2xl font-bold text-red-700 dark:text-red-400">
+                ${formatCurrency(frozenCash)}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Portfolio Positions */}
+      <div className="card p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white">持仓明细</h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
+            数据每5秒自动刷新
+          </p>
+        </div>
+
+        <div className={`relative min-h-[400px] transition-all duration-500 ${isRefreshing ? "scale-[0.99] opacity-60" : "scale-100 opacity-100"}`}>
+          {portfolioPositions.length === 0 ? (
+            <div className="text-center py-16 bg-gray-50 dark:bg-gray-800 rounded-lg">
+              <p className="text-gray-500 dark:text-gray-400">当前账户暂无股票持仓</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                  <tr>
+                    <th className="px-4 py-3 text-left">代码</th>
+                    <th className="px-4 py-3 text-left">名称</th>
+                    <th className="px-4 py-3 text-center">方向</th>
+                    <th className="px-4 py-3 text-right">持仓</th>
+                    <th className="px-4 py-3 text-right">成本价</th>
+                    <th className="px-4 py-3 text-right">现价</th>
+                    <th className="px-4 py-3 text-right">市值</th>
+                    <th className="px-4 py-3 text-right">盈亏</th>
+                    <th className="px-4 py-3 text-right">盈亏%</th>
+                    <th className="px-4 py-3 text-right">当日盈亏</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                  {portfolioPositions.map((position, index) => {
+                    const pnlPositive = position.pnl >= 0;
+                    const dayPnl = (position as any).day_pnl || 0;
+                    const dayPnlPercent = (position as any).day_pnl_percent || 0;
+                    const dayPnlPositive = dayPnl >= 0;
+
+                    return (
+                      <tr
+                        key={position.symbol}
+                        className={`
+                          hover:bg-gray-50 dark:hover:bg-gray-700 transition-all duration-300
+                          ${isRefreshing ? `animate-pulse delay-${index * 50}` : ""}
+                        `}
+                      >
+                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                          {position.symbol}
+                        </td>
+                        <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
+                          {position.symbol_name ?? "-"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <span className={`
+                            px-2 py-1 text-xs font-medium rounded-full
+                            ${position.direction === "short"
+                              ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"}
+                          `}>
+                            {position.direction === "short" ? "空" : "多"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
+                          {formatNumber(position.qty, 0)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-900 dark:text-white">
+                          ${formatCurrency(position.avg_price)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
+                          ${formatCurrency(position.last_price)}
+                        </td>
+                        <td className="px-4 py-3 text-right font-medium text-gray-900 dark:text-white">
+                          ${formatCurrency(position.market_value)}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-medium ${pnlPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                          ${formatCurrency(position.pnl)}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-medium ${pnlPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                          {formatPercent(position.pnl_percent)}
+                        </td>
+                        <td className={`px-4 py-3 text-right ${dayPnlPositive ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}`}>
+                          <div className="font-medium">${formatCurrency(dayPnl)}</div>
+                          <div className="text-xs">{formatPercent(dayPnlPercent)}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {portfolioLoading && (
+            <div className="absolute inset-0 bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm flex items-center justify-center rounded-lg">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* WebSocket Event Log */}
+      <div className="card p-6">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+          实时数据流（最近 {logLimit} 条）
+        </h3>
+        <div className="bg-gray-900 dark:bg-black text-gray-300 rounded-lg p-4 max-h-80 overflow-y-auto font-mono text-xs">
+          {eventLog.length === 0 ? (
+            <p className="text-gray-500">等待实时数据推送...</p>
+          ) : (
+            eventLog.map((evt, idx) => (
+              <div key={`${evt.symbol}-${evt.sequence ?? idx}`} className="mb-1 hover:bg-gray-800 p-1 rounded">
+                <span className="text-blue-400">[{new Date().toLocaleTimeString()}]</span> {JSON.stringify(evt)}
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Tick Data Query */}
+      <div className="card p-6">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+          历史 Tick 数据查询
+        </h3>
+        <div className="flex flex-col sm:flex-row gap-4 mb-4">
+          <input
+            type="text"
+            className="input-field flex-1"
+            placeholder="如：700.HK 或 AAPL.US"
+            value={symbolQuery}
+            onChange={(e) => setSymbolQuery(e.target.value.toUpperCase())}
           />
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }}>
-            <Box>
-              <Typography variant="h4" sx={{ fontWeight: 700, color: 'white' }}>
-                投资组合概览
-              </Typography>
-              <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)', mt: 1 }}>
-                实时监控 · 自动更新 · {statusSubscribed.length} 只股票订阅
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Chip
-                label={socketStatus}
-                sx={{
-                  bgcolor: socketStatus === "CONNECTED" ? '#4caf50' : socketStatus === "ERROR" ? '#f44336' : '#9e9e9e',
-                  color: 'white',
-                  fontWeight: 600,
-                }}
-              />
-              <Button
-                variant="contained"
-                size="small"
-                onClick={refreshPortfolio}
-                disabled={portfolioLoading}
-                startIcon={<RefreshIcon sx={{
-                  animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
-                  '@keyframes spin': {
-                    '0%': { transform: 'rotate(0deg)' },
-                    '100%': { transform: 'rotate(360deg)' },
-                  }
-                }} />}
-                sx={{
-                  bgcolor: 'white',
-                  color: '#667eea',
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.9)' }
-                }}
-              >
-                {portfolioLoading ? "刷新中..." : "刷新"}
-              </Button>
-            </Stack>
-          </Stack>
-        </Paper>
-
-        {/* KPI Cards */}
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={2}>
-            <KpiCard
-              title="总资产"
-              value={`$${formatCurrency(displayTotalAssets)}`}
-              subtitle="口径：现金+持仓市值（USD）"
-              icon={<BankIcon sx={{ fontSize: 28 }} />}
-              color="primary"
-              isRefreshing={isRefreshing}
-            />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <KpiCard
-              title="现金"
-              value={`$${formatCurrency(totalCash)}`}
-              subtitle="可用资金"
-              icon={<MoneyIcon sx={{ fontSize: 28 }} />}
-              color="info"
-              isRefreshing={isRefreshing}
-            />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <KpiCard
-              title="持仓市值"
-              value={`$${formatCurrency(portfolioTotals.market_value)}`}
-              subtitle={`成本: $${formatCurrency(portfolioTotals.cost)}`}
-              icon={<TrendingUpIcon sx={{ fontSize: 28 }} />}
-              color="success"
-              isRefreshing={isRefreshing}
-            />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <KpiCard
-              title="总盈亏"
-              value={`$${formatCurrency(portfolioTotals.pnl)}`}
-              subtitle={formatPercent(portfolioTotals.pnl_percent)}
-              icon={<PaidIcon sx={{ fontSize: 28 }} />}
-              color={portfolioTotals.pnl >= 0 ? "success" : "error"}
-              isRefreshing={isRefreshing}
-            />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <KpiCard
-              title="当日盈亏"
-              value={`$${formatCurrency(portfolioTotals.day_pnl || 0)}`}
-              subtitle={formatPercent(portfolioTotals.day_pnl_percent || 0)}
-              icon={<ChartIcon sx={{ fontSize: 28 }} />}
-              color={(portfolioTotals.day_pnl || 0) >= 0 ? "success" : "error"}
-              isRefreshing={isRefreshing}
-            />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <KpiCard
-              title="融资欠款"
-              value={`$${formatCurrency(totalFinanceUsed)}`}
-              subtitle="已用融资额度"
-              icon={<CreditIcon sx={{ fontSize: 28 }} />}
-              color="warning"
-              isRefreshing={isRefreshing}
-            />
-          </Grid>
-        </Grid>
-
-        {/* Account Balance Details - Only show USD */}
-        {usdBalance && Object.keys(usdBalance).length > 0 && (
-          <Fade in={true} timeout={600}>
-            <Card elevation={1} sx={{ p: 2.5, borderRadius: 3 }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                账户资金明细 (USD)
-              </Typography>
-              <Grid container spacing={3}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    bgcolor: 'blue.50',
-                    border: '1px solid',
-                    borderColor: 'blue.200',
-                  }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      可用现金
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'blue.700' }}>
-                      ${formatCurrency(totalCash)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    bgcolor: 'orange.50',
-                    border: '1px solid',
-                    borderColor: 'orange.200',
-                  }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      融资欠款
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'orange.700' }}>
-                      ${formatCurrency(totalFinanceUsed || usdBalance?.debit || 0)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    bgcolor: 'green.50',
-                    border: '1px solid',
-                    borderColor: 'green.200',
-                  }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      持仓市值
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'green.700' }}>
-                      ${formatCurrency(portfolioTotals.market_value)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    bgcolor: 'purple.50',
-                    border: '1px solid',
-                    borderColor: 'purple.200',
-                  }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      总资产（现金+持仓）
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'purple.700' }}>
-                      ${formatCurrency(displayTotalAssets)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Paper sx={{
-                    p: 2.5,
-                    borderRadius: 2,
-                    bgcolor: 'red.50',
-                    border: '1px solid',
-                    borderColor: 'red.200',
-                  }}>
-                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                      冻结资金
-                    </Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'red.700' }}>
-                      ${formatCurrency(frozenCash)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-            </Card>
-          </Fade>
-        )}
-
-        {/* Portfolio Positions with animation */}
-        <Paper elevation={2} sx={{ p: 3, borderRadius: 3 }}>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "flex-start", sm: "center" }} justifyContent="space-between" sx={{ mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-              持仓明细
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              数据每5秒自动刷新，盈亏基于成本价和最新价计算
-            </Typography>
-          </Stack>
-
-          <Box sx={{ position: 'relative', minHeight: 400 }}>
-            <Box
-              sx={{
-                transition: 'all 0.5s ease',
-                transform: isRefreshing ? 'scale(0.99)' : 'scale(1)',
-                opacity: isRefreshing ? 0.6 : 1,
-              }}
-            >
-              {portfolioPositions.length === 0 ? (
-                <Box sx={{
-                  textAlign: 'center',
-                  py: 8,
-                  bgcolor: 'grey.50',
-                  borderRadius: 2
-                }}>
-                  <Typography variant="body1" color="text.secondary">
-                    当前账户暂无股票持仓
-                  </Typography>
-                </Box>
-              ) : (
-                <TableContainer component={Paper} variant="outlined" sx={{
-                  borderRadius: 2,
-                  position: 'relative',
-                  overflow: 'hidden',
-                }}>
-                  {isRefreshing && (
-                    <Box
-                      sx={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        right: 0,
-                        height: 4,
-                        bgcolor: 'primary.main',
-                        zIndex: 1000,
-                        animation: 'slideProgress 0.8s ease',
-                        '@keyframes slideProgress': {
-                          '0%': { transform: 'translateX(-100%)' },
-                          '100%': { transform: 'translateX(100%)' },
-                        },
-                      }}
-                    />
-                  )}
-                  <Table size="small">
-                    <TableHead>
-                      <TableRow sx={{ bgcolor: 'grey.50' }}>
-                        <TableCell sx={{ fontWeight: 600 }}>代码</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>名称</TableCell>
-                        <TableCell align="center" sx={{ fontWeight: 600 }}>方向</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>持仓</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>可用</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>成本价</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>现价</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>成本</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>市值</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>盈亏</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>盈亏%</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>当日盈亏</TableCell>
-                      </TableRow>
-                    </TableHead>
-                      <TableBody>
-                        {portfolioPositions.map((position, index) => {
-                          const pnlPositive = position.pnl >= 0;
-                          const dayPnl = (position as any).day_pnl || 0;
-                          const dayPnlPercent = (position as any).day_pnl_percent || 0;
-                          const dayPnlPositive = dayPnl >= 0;
-
-                          return (
-                            <TableRow
-                              key={position.symbol}
-                              hover
-                              sx={{
-                                transition: 'all 0.3s ease',
-                                animation: isRefreshing ? `rowRefresh 0.6s ease ${index * 0.05}s` : 'none',
-                                '@keyframes rowRefresh': {
-                                  '0%': {
-                                    transform: 'translateX(0)',
-                                    backgroundColor: 'transparent'
-                                  },
-                                  '50%': {
-                                    transform: 'translateX(5px)',
-                                    backgroundColor: 'rgba(66, 165, 245, 0.1)'
-                                  },
-                                  '100%': {
-                                    transform: 'translateX(0)',
-                                    backgroundColor: 'transparent'
-                                  },
-                                },
-                              }}
-                            >
-                                <TableCell>
-                                  <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                                    {position.symbol}
-                                  </Typography>
-                                </TableCell>
-                                <TableCell>{position.symbol_name ?? "-"}</TableCell>
-                                <TableCell align="center">
-                                  <Chip
-                                    size="small"
-                                    label={position.direction === "short" ? "空" : "多"}
-                                    color={position.direction === "short" ? "warning" : "success"}
-                                    sx={{ fontWeight: 600 }}
-                                  />
-                                </TableCell>
-                                <TableCell align="right">{formatNumber(position.qty, 0)}</TableCell>
-                                <TableCell align="right">
-                                  {position.available_quantity != null ? formatNumber(position.available_quantity, 0) : "-"}
-                                </TableCell>
-                                <TableCell align="right">${formatCurrency(position.avg_price)}</TableCell>
-                                <TableCell align="right">
-                                  {position.last_price != null ? (
-                                    <Typography sx={{ fontWeight: 600 }}>
-                                      ${formatCurrency(position.last_price)}
-                                    </Typography>
-                                  ) : "-"}
-                                </TableCell>
-                                <TableCell align="right">${formatCurrency(position.cost_value)}</TableCell>
-                                <TableCell align="right" sx={{ fontWeight: 600 }}>
-                                  ${formatCurrency(position.market_value)}
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{
-                                    color: pnlPositive ? "success.main" : "error.main",
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  ${formatCurrency(position.pnl)}
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{
-                                    color: pnlPositive ? "success.main" : "error.main",
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  {formatPercent(position.pnl_percent)}
-                                </TableCell>
-                                <TableCell
-                                  align="right"
-                                  sx={{
-                                    color: dayPnlPositive ? "success.main" : "error.main",
-                                    fontWeight: 600
-                                  }}
-                                >
-                                  ${formatCurrency(dayPnl)}
-                                  <Typography variant="caption" display="block">
-                                    {formatPercent(dayPnlPercent)}
-                                  </Typography>
-                                </TableCell>
-                              </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                )}
-              </Box>
-
-            {/* Loading overlay */}
-            <Fade in={portfolioLoading} timeout={300}>
-              <Box sx={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                bgcolor: 'rgba(255,255,255,0.8)',
-                borderRadius: 2,
-              }}>
-                <CircularProgress />
-              </Box>
-            </Fade>
-          </Box>
-        </Paper>
-
-        {/* WebSocket Event Log */}
-        <Paper elevation={1} sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            实时数据流（最近 {logLimit} 条）
-          </Typography>
-          <Box
-            sx={{
-              bgcolor: "#0d1117",
-              color: "#d1d5db",
-              borderRadius: 2,
-              p: 2,
-              maxHeight: 320,
-              overflowY: "auto",
-              fontFamily: "'JetBrains Mono', 'Courier New', monospace",
-              fontSize: 12,
-              lineHeight: 1.5,
-            }}
+          <button
+            className="btn-primary"
+            onClick={handleFetchTicks}
+            disabled={tickLoading}
           >
-            {eventLog.length === 0 ? (
-              <Typography variant="body2" color="inherit">
-                等待实时数据推送...
-              </Typography>
-            ) : (
-              eventLog.map((evt, idx) => (
-                <Box key={`${evt.symbol}-${evt.sequence ?? idx}`} sx={{ mb: 0.5 }}>
-                  <span style={{ color: '#58a6ff' }}>[{new Date().toLocaleTimeString()}]</span> {JSON.stringify(evt)}
-                </Box>
-              ))
-            )}
-          </Box>
-        </Paper>
+            {tickLoading ? "查询中..." : "🔍 查询"}
+          </button>
+        </div>
 
-        {/* Tick Data Query */}
-        <Paper elevation={1} sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-            历史 Tick 数据查询
-          </Typography>
-          <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "center" }}>
-            <TextField
-              label="股票代码"
-              value={symbolQuery}
-              onChange={(e) => setSymbolQuery(e.target.value.toUpperCase())}
-              placeholder="如：700.HK 或 AAPL.US"
-              size="small"
-              fullWidth
-            />
-            <Button
-              variant="contained"
-              onClick={handleFetchTicks}
-              disabled={tickLoading}
-              sx={{ minWidth: 120 }}
-            >
-              {tickLoading ? "查询中..." : "查询"}
-            </Button>
-          </Stack>
-          <Box
-            sx={{
-              mt: 2,
-              bgcolor: "grey.50",
-              borderRadius: 2,
-              p: 2,
-              maxHeight: 260,
-              overflowY: "auto",
-              fontFamily: "'JetBrains Mono', 'Courier New', monospace",
-              fontSize: 12,
-            }}
-          >
-            {tickLoading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
-                <CircularProgress size={24} />
-              </Box>
-            ) : tickData.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" align="center">
-                暂无数据，请输入股票代码并查询
-              </Typography>
-            ) : (
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>时间</TableCell>
-                    <TableCell align="right">价格</TableCell>
-                    <TableCell align="right">成交量</TableCell>
-                    <TableCell align="right">序号</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 max-h-64 overflow-y-auto">
+          {tickLoading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            </div>
+          ) : tickData.length === 0 ? (
+            <p className="text-center text-gray-500 dark:text-gray-400 py-8">
+              暂无数据，请输入股票代码并查询
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
+                  <tr>
+                    <th className="px-4 py-2 text-left">时间</th>
+                    <th className="px-4 py-2 text-right">价格</th>
+                    <th className="px-4 py-2 text-right">成交量</th>
+                    <th className="px-4 py-2 text-right">序号</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200 dark:divide-gray-600">
                   {tickData.map((tick, idx) => (
-                    <TableRow key={`${tick.ts}-${idx}`}>
-                      <TableCell>{new Date(tick.ts).toLocaleString()}</TableCell>
-                      <TableCell align="right">${tick.price ?? "-"}</TableCell>
-                      <TableCell align="right">{tick.volume ?? "-"}</TableCell>
-                      <TableCell align="right">{tick.sequence ?? "-"}</TableCell>
-                    </TableRow>
+                    <tr key={`${tick.ts}-${idx}`} className="hover:bg-gray-100 dark:hover:bg-gray-700">
+                      <td className="px-4 py-2">{new Date(tick.ts).toLocaleString()}</td>
+                      <td className="px-4 py-2 text-right">${tick.price ?? "-"}</td>
+                      <td className="px-4 py-2 text-right">{tick.volume ?? "-"}</td>
+                      <td className="px-4 py-2 text-right">{tick.sequence ?? "-"}</td>
+                    </tr>
                   ))}
-                </TableBody>
-              </Table>
-            )}
-          </Box>
-        </Paper>
-      </Stack>
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
 
       <StatusSnackbar
         open={snackbar.open}
@@ -982,6 +637,6 @@ export default function RealtimePage() {
         severity={snackbar.severity}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       />
-    </Container>
+    </div>
   );
 }

@@ -4,7 +4,15 @@
       "Bash(source:*)",
       "Bash(pip install:*)",
       "Bash(python:*)",
-      "WebFetch(domain:open.longbridge.com)"
+      "WebFetch(domain:open.longbridge.com)",
+      "Bash(npm install:*)",
+      "Bash(npx tailwindcss:*)",
+      "Bash(npm run dev:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(curl:*)",
+      "Bash(pkill:*)",
+      "Bash(uvicorn:*)"
     ],
     "deny": [],
     "ask": []

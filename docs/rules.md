@@ -75,9 +75,5 @@
 ## 当前进度（2025-09-20）
 - 后端已完成凭据/股票配置接口，DuckDB 表初始化，历史 K 线同步与缓存查询，以及行情订阅线程（`QuoteStreamManager`）+ WebSocket `/ws/quotes` 推送。
 - 实时推送会写入 `ticks` 表，并提供 `/quotes/ticks` 与 `/quotes/stream/status` REST 查询入口。
-- 新增持仓配置与盈亏计算：`/portfolio/positions`、`/portfolio/overview` 接口支持本地持仓维护、最新行情估值与 PnL 统计，前端实时根据推送动态刷新。
-- 持仓信息现直接对接 Longbridge Trade API `stock_positions`，后台自动解析渠道 `channels.positions` 并按照多/空方向计算成本、市值、盈亏。
-- 前端实时页面改为表格呈现持仓清单，展示方向、市场、可用数量、盈亏等核心字段。
-- 前端实现“基础配置”和“实时行情”两个 Tab：可录入凭据、股票列表、维护持仓，下发历史同步请求，并通过 WebSocket 实时查看行情快照、盈亏卡片、日志与 Tick 查询工具。
-- 项目结构已稳定：`backend/`（FastAPI 服务）+ `frontend/`（React 管理界面）+ `docs/` 规则/规范，界面采用 Material UI 现代化布局。
-- 近期修复：`QuoteStreamManager.ensure_started` 与 `request_restart` 调整为在释放锁后更新状态，避免启动阶段因重复加锁造成死锁；`main.py` 增加日志输出与基础日志配置，方便调试启动流程。
+- 前端实现“基础配置”和“实时行情”两个 Tab：可录入凭据、股票列表、下发历史同步请求，并通过 WebSocket 实时查看行情快照、日志与 Tick 查询工具。
+- 项目结构已稳定：`backend/`（FastAPI 服务）+ `frontend/`（React 管理界面）+ `docs/` 规则/规范。

@@ -1,16 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Box,
-  Button,
-  CircularProgress,
-  Container,
-  MenuItem,
-  Paper,
-  Stack,
-  TextField,
-  Typography,
-} from "@mui/material";
-
 import StatusSnackbar from "../components/StatusSnackbar";
 import {
   Credentials,
@@ -236,222 +224,213 @@ export default function SettingsPage() {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          minHeight: "100vh",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <CircularProgress />
-      </Box>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Stack spacing={4}>
-        <Paper elevation={1} sx={{ p: 4 }}>
-          <Typography variant="h5" gutterBottom>
-            Longbridge 凭据配置
-          </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            请填写从 Longbridge 开发者平台注册获得的凭据，仅存储在本地 DuckDB。
-          </Typography>
-          <Box component="form" onSubmit={handleCredSubmit} sx={{ mt: 2 }}>
-            <Stack spacing={2}>
-              <TextField
-                label="LONGPORT_APP_KEY"
-                value={credentials.LONGPORT_APP_KEY}
-                onChange={handleCredChange("LONGPORT_APP_KEY")}
-                required
-                fullWidth
-              />
-              <TextField
-                label="LONGPORT_APP_SECRET"
-                value={credentials.LONGPORT_APP_SECRET}
-                onChange={handleCredChange("LONGPORT_APP_SECRET")}
-                required
-                fullWidth
-              />
-              <TextField
-                label="LONGPORT_ACCESS_TOKEN"
-                value={credentials.LONGPORT_ACCESS_TOKEN}
-                onChange={handleCredChange("LONGPORT_ACCESS_TOKEN")}
-                required
-                fullWidth
-              />
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  gap: 2,
-                  flexWrap: "wrap",
-                }}
-              >
-                <Button type="submit" variant="contained">
-                  保存凭据
-                </Button>
-                <Button
-                  type="button"
-                  variant="outlined"
-                  onClick={handleVerify}
-                  disabled={verifying}
-                >
-                  {verifying ? "验证中..." : "验证凭据与行情"}
-                </Button>
-              </Box>
-            </Stack>
-          </Box>
-        </Paper>
+    <div className="space-y-6 animate-slide-up">
+      {/* Credentials Configuration */}
+      <div className="card p-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          Longbridge 凭据配置
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          请填写从 Longbridge 开发者平台注册获得的凭据，仅存储在本地 DuckDB。
+        </p>
+        <form onSubmit={handleCredSubmit} className="space-y-4">
+          <div>
+            <label className="label">LONGPORT_APP_KEY</label>
+            <input
+              type="text"
+              className="input-field"
+              value={credentials.LONGPORT_APP_KEY}
+              onChange={handleCredChange("LONGPORT_APP_KEY")}
+              required
+              placeholder="输入你的 APP KEY"
+            />
+          </div>
+          <div>
+            <label className="label">LONGPORT_APP_SECRET</label>
+            <input
+              type="password"
+              className="input-field"
+              value={credentials.LONGPORT_APP_SECRET}
+              onChange={handleCredChange("LONGPORT_APP_SECRET")}
+              required
+              placeholder="输入你的 APP SECRET"
+            />
+          </div>
+          <div>
+            <label className="label">LONGPORT_ACCESS_TOKEN</label>
+            <input
+              type="password"
+              className="input-field"
+              value={credentials.LONGPORT_ACCESS_TOKEN}
+              onChange={handleCredChange("LONGPORT_ACCESS_TOKEN")}
+              required
+              placeholder="输入你的 ACCESS TOKEN"
+            />
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button type="submit" className="btn-primary">
+              💾 保存凭据
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleVerify}
+              disabled={verifying}
+            >
+              {verifying ? "验证中..." : "🔍 验证凭据与行情"}
+            </button>
+          </div>
+        </form>
+      </div>
 
-        <Paper elevation={1} sx={{ p: 4 }}>
-          <Typography variant="h5" gutterBottom>
-            股票列表配置
-          </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            每行填写一只股票代码，如：`AAPL.US` 或 `700.HK`。
-          </Typography>
-          <Box component="form" onSubmit={handleSymbolSubmit} sx={{ mt: 2 }}>
-            <Stack spacing={2}>
-              <TextField
-                label="股票代码"
-                value={symbols}
-                onChange={handleSymbolsChange}
-                minRows={6}
-                multiline
-                placeholder={"AAPL.US\nTSLA.US\n700.HK"}
-                fullWidth
-              />
-              <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                <Button type="submit" variant="contained">
-                  保存列表
-                </Button>
-              </Box>
-            </Stack>
-          </Box>
-        </Paper>
+      {/* Stock List Configuration */}
+      <div className="card p-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          股票列表配置
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          每行填写一只股票代码，如：`AAPL.US` 或 `700.HK`。
+        </p>
+        <form onSubmit={handleSymbolSubmit} className="space-y-4">
+          <div>
+            <label className="label">股票代码</label>
+            <textarea
+              className="input-field min-h-[150px] font-mono"
+              value={symbols}
+              onChange={handleSymbolsChange}
+              placeholder="AAPL.US\nTSLA.US\n700.HK"
+            />
+          </div>
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary">
+              📝 保存列表
+            </button>
+          </div>
+        </form>
+      </div>
 
-        <Paper elevation={1} sx={{ p: 4 }}>
-          <Typography variant="h5" gutterBottom>
-            历史 K 线同步与预览
-          </Typography>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            调用 Longbridge `history_candlesticks_by_offset` 接口同步数据至本地 DuckDB，并可查看拉取结果样例。
-          </Typography>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select
-                label="周期"
+      {/* History K-Line Sync and Preview */}
+      <div className="card p-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          历史 K 线同步与预览
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          调用 Longbridge `history_candlesticks_by_offset` 接口同步数据至本地 DuckDB，并可查看拉取结果样例。
+        </p>
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <label className="label">周期</label>
+              <select
+                className="input-field"
                 value={historyPeriod}
                 onChange={(e) => setHistoryPeriod(e.target.value)}
-                fullWidth
               >
                 {PERIOD_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
+                  <option key={option.value} value={option.value}>
                     {option.label}
-                  </MenuItem>
+                  </option>
                 ))}
-              </TextField>
-              <TextField
-                select
-                label="复权"
+              </select>
+            </div>
+            <div>
+              <label className="label">复权</label>
+              <select
+                className="input-field"
                 value={historyAdjust}
                 onChange={(e) => setHistoryAdjust(e.target.value)}
-                fullWidth
               >
                 {ADJUST_OPTIONS.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
+                  <option key={option.value} value={option.value}>
                     {option.label}
-                  </MenuItem>
+                  </option>
                 ))}
-              </TextField>
-              <TextField
-                label="数量"
+              </select>
+            </div>
+            <div>
+              <label className="label">数量</label>
+              <input
                 type="number"
+                className="input-field"
                 value={historyCount}
                 onChange={(e) => setHistoryCount(Number(e.target.value) || 0)}
-                fullWidth
-                inputProps={{ min: 1, max: 1000 }}
+                min={1}
+                max={1000}
               />
-            </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-              <TextField
-                select
-                label="预览股票"
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="label">预览股票</label>
+              <select
+                className="input-field"
                 value={selectedSymbol}
                 onChange={(e) => setSelectedSymbol(e.target.value)}
-                fullWidth
               >
                 {symbolList.length === 0 ? (
-                  <MenuItem value="" disabled>
+                  <option value="" disabled>
                     请先保存股票列表
-                  </MenuItem>
+                  </option>
                 ) : (
                   symbolList.map((sym) => (
-                    <MenuItem key={sym} value={sym}>
+                    <option key={sym} value={sym}>
                       {sym}
-                    </MenuItem>
+                    </option>
                   ))
                 )}
-              </TextField>
-              <Box
-                sx={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  alignItems: "center",
-                  gap: 2,
-                  width: "100%",
-                }}
+              </select>
+            </div>
+            <div className="flex items-end gap-3">
+              <button
+                className="btn-primary flex-1"
+                onClick={handleHistorySync}
+                disabled={historyLoading || parsedSymbols.length === 0}
               >
-                <Button
-                  variant="contained"
-                  onClick={handleHistorySync}
-                  disabled={historyLoading || parsedSymbols.length === 0}
-                >
-                  {historyLoading ? "执行中..." : "同步历史数据"}
-                </Button>
-                <Button
-                  variant="outlined"
-                  onClick={handleHistoryFetch}
-                  disabled={historyLoading || !selectedSymbol}
-                >
-                  预览最近数据
-                </Button>
-              </Box>
-            </Stack>
-            <Box
-              sx={{
-                bgcolor: "#fafafa",
-                borderRadius: 2,
-                p: 2,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 13,
-                maxHeight: 240,
-                overflowY: "auto",
-              }}
-            >
-              {historyBars.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  暂无数据，点击“同步历史数据”并“预览最近数据”查看结果。
-                </Typography>
-              ) : (
-                historyBars.slice(0, 20).map((bar) => (
-                  <Box key={`${bar.ts}`} sx={{ mb: 1 }}>
-                    <strong>{new Date(bar.ts).toLocaleString()}</strong>
-                    {" — O:"}
-                    {bar.open ?? "-"} H:{bar.high ?? "-"} L:{bar.low ?? "-"} C:{bar.close ?? "-"} V:{
-                      bar.volume ?? "-"
-                    }
-                  </Box>
-                ))
-              )}
-            </Box>
-          </Stack>
-        </Paper>
-      </Stack>
+                {historyLoading ? "执行中..." : "🔄 同步历史数据"}
+              </button>
+              <button
+                className="btn-secondary flex-1"
+                onClick={handleHistoryFetch}
+                disabled={historyLoading || !selectedSymbol}
+              >
+                👁️ 预览最近数据
+              </button>
+            </div>
+          </div>
+
+          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700">
+            {historyBars.length === 0 ? (
+              <p className="text-gray-500 dark:text-gray-400 text-sm">
+                暂无数据，点击"同步历史数据"并"预览最近数据"查看结果。
+              </p>
+            ) : (
+              <div className="space-y-2 font-mono text-sm">
+                {historyBars.slice(0, 20).map((bar) => (
+                  <div
+                    key={`${bar.ts}`}
+                    className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 p-1 rounded transition-colors"
+                  >
+                    <span className="font-semibold text-primary-600 dark:text-primary-400">
+                      {new Date(bar.ts).toLocaleString()}
+                    </span>
+                    <span className="ml-2">
+                      O:{bar.open ?? "-"} H:{bar.high ?? "-"} L:{bar.low ?? "-"} C:{bar.close ?? "-"} V:{bar.volume ?? "-"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <StatusSnackbar
         open={snackbar.open}
@@ -459,6 +438,6 @@ export default function SettingsPage() {
         severity={snackbar.severity}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       />
-    </Container>
+    </div>
   );
 }

@@ -81,7 +81,12 @@ def store_candlesticks(symbol: str, candles: Iterable) -> int:
         timestamp = getattr(candle, "timestamp", None)
         if timestamp is None:
             continue
-        ts = datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None)
+        # Check if timestamp is already a datetime object
+        if isinstance(timestamp, datetime):
+            ts = timestamp.replace(tzinfo=None) if timestamp.tzinfo else timestamp
+        else:
+            # Assume it's a timestamp (int or float)
+            ts = datetime.fromtimestamp(timestamp, tz=timezone.utc).replace(tzinfo=None)
         open_price = _safe_float(getattr(candle, "open", None))
         high_price = _safe_float(getattr(candle, "high", None))
         low_price = _safe_float(getattr(candle, "low", None))
@@ -104,11 +109,14 @@ def store_candlesticks(symbol: str, candles: Iterable) -> int:
         return 0
 
     with get_connection() as conn:
-        conn.executemany("DELETE FROM ohlc WHERE symbol = ? AND ts = ?", delete_params)
+        # First delete existing records to avoid duplicates
+        # Note: We're using INSERT OR REPLACE instead of DELETE then INSERT
         conn.executemany(
-            "INSERT INTO ohlc (symbol, ts, open, high, low, close, volume, turnover) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            """INSERT OR REPLACE INTO ohlc (symbol, ts, open, high, low, close, volume, turnover)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             records,
         )
+        conn.commit()  # Explicitly commit the transaction
     return len(records)
 
 
