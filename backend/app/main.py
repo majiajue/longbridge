@@ -11,7 +11,10 @@ from .config import get_settings
 from .routers import portfolio as portfolio_router
 from .routers import quotes as quotes_router
 from .routers import settings as settings_router
+from .routers import strategies as strategies_router
+from .routers import monitoring as monitoring_router
 from .streaming import quote_stream_manager
+from .position_monitor import get_position_monitor
 
 
 app = FastAPI(title="Longbridge Quant Backend", version="0.1.0")
@@ -29,6 +32,8 @@ app.add_middleware(
 app.include_router(settings_router.router)
 app.include_router(quotes_router.router)
 app.include_router(portfolio_router.router)
+app.include_router(strategies_router.router)
+app.include_router(monitoring_router.router)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -41,11 +46,20 @@ async def on_startup() -> None:
     quote_stream_manager.ensure_started()
     logger.info("startup: ensure_started finished")
 
+    # Initialize position monitor
+    monitor = get_position_monitor()
+    asyncio.create_task(monitor.start_monitoring())
+    logger.info("startup: position monitor started")
+
 
 
 @app.on_event("shutdown")
 async def on_shutdown() -> None:
     await quote_stream_manager.stop()
+
+    # Stop position monitor
+    monitor = get_position_monitor()
+    await monitor.stop_monitoring()
 
 
 @app.get("/health")

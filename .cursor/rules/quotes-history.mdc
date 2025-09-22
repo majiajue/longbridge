@@ -1,0 +1,32 @@
+---
+globs: backend/app/routers/quotes.py,backend/app/services.py,backend/app/streaming.py
+description: 行情与历史数据接口（同步、缓存、ticks、流状态）
+---
+
+# 行情与历史数据规则
+
+API 约定：
+- `POST /quotes/history/sync`：按 `symbols/period/adjust_type/count` 拉取历史 K 线并落库 `ohlc`
+- `GET /quotes/history`：从缓存（DuckDB 或 repositories）读取最近 N 条 K 线
+- `GET /quotes/ticks`：读取最近 N 条逐笔明细（表 `ticks`）
+- `GET /quotes/stream/status`：返回 `QuoteStreamManager.snapshot()`
+
+服务层细节（`services.py`）：
+- `sync_history_candlesticks()`：
+  - period/adjust 使用映射 `_PERIOD_NAME_MAP/_ADJUST_NAME_MAP`
+  - 优先用 `ctx.candlesticks()`，无数据则回退 `history_candlesticks_by_offset()`
+  - 使用 `repositories.store_candlesticks()` 落库
+- `get_cached_candlesticks()`：如无 `repositories.fetch_candlesticks`，回退直查 DuckDB
+
+实时推送：
+- `streaming._normalize_quote()` 统一生成前端友好字段（含 `timestamp` unix、`change_value/%`）
+- 推送到监听队列；策略引擎与监控通过 `_process_strategy_quote()` 异步处理
+
+错误与边界：
+- 参数非法 → 400；SDK 缺失 → 503；上游错误 → 502
+- `limit` 最高 1000；`count` 最高 1000
+
+参考：
+- [backend/app/routers/quotes.py](mdc:backend/app/routers/quotes.py)
+- [backend/app/services.py](mdc:backend/app/services.py)
+- [backend/app/streaming.py](mdc:backend/app/streaming.py)

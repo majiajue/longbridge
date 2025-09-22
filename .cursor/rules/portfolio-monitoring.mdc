@@ -1,0 +1,34 @@
+---
+globs: backend/app/routers/portfolio.py,backend/app/services.py,backend/app/models.py,backend/app/streaming.py
+description: 资产组合与监控（positions/overview、监控模型、组合推送）
+---
+
+# 资产组合与监控规则
+
+API 约定：
+- `GET /portfolio/positions`：列表化当前账户持仓，字段兼容多版本返回
+- `GET /portfolio/overview`：返回 `positions/totals/account_balance` 综合信息
+
+模型与字段：
+- 详见 `models.py`：`PortfolioPosition/PortfolioOverviewResponse` 等
+- 监控与策略相关枚举/模型：`MonitoringStatus/StrategyMode/PositionMonitoringConfig/GlobalMonitoringSettings` 等
+
+服务层：
+- `get_positions()`：
+  - 使用 `TradeContext.stock_positions()`，兼容 `channels/list` 与属性式返回
+  - 归一字段：`symbol/symbol_name/currency/qty/available_quantity/avg_price/market/direction`
+- `get_account_balance()`：
+  - 优先拉取 USD，再合并全币种；USD 缺失时返回 `_meta.usd_missing`
+  - 解析 `cash_infos`、冻结费用与融资字段
+- `get_portfolio_overview()`：
+  - 先用缓存价（`fetch_latest_prices`），再尝试实时 `ctx.quote(symbols)` 覆盖，并尽力保存到 DB
+  - 计算 `cost/market_value/pnl/pnl_percent`，`day_*` 为简化占位
+
+实时推送：
+- `QuoteStreamManager._run_portfolio_updates()` 每 5 秒推送组合快照到 WebSocket 队列
+
+参考：
+- [backend/app/routers/portfolio.py](mdc:backend/app/routers/portfolio.py)
+- [backend/app/services.py](mdc:backend/app/services.py)
+- [backend/app/models.py](mdc:backend/app/models.py)
+- [backend/app/streaming.py](mdc:backend/app/streaming.py)

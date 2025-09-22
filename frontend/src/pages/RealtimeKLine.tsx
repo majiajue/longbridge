@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, IChartApi, Time, ISeriesApi } from 'lightweight-charts';
+import { resolveWsUrl } from '../api/client';
 
 interface RealtimeQuote {
   symbol: string;
@@ -52,22 +53,87 @@ export default function RealtimeKLinePage() {
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const lastBarRef = useRef<any>(null);
 
-  // Load symbols from backend
+  // Normalize HK symbols for comparison (pad to 4 digits)
+  const normalizeSymbolHK = (sym: string | null | undefined) => {
+    if (!sym) return '';
+    const s = sym.toUpperCase();
+    if (s.endsWith('.HK')) {
+      const [code, mkt] = s.split('.');
+      if (/^\d+$/.test(code)) {
+        return `${String(parseInt(code, 10)).padStart(4, '0')}.${mkt}`;
+      }
+    }
+    return s;
+  };
+
+  // De-normalize HK symbols for lookup (remove leading zeros)
+  const denormalizeSymbolHK = (sym: string) => {
+    const s = sym.toUpperCase();
+    if (s.endsWith('.HK')) {
+      const [code, mkt] = s.split('.');
+      if (/^\d+$/.test(code)) {
+        return `${String(parseInt(code, 10))}.${mkt}`;
+      }
+    }
+    return s;
+  };
+
+  // Ensure the selected symbol is subscribed on backend
+  const ensureSubscribed = useCallback(async (symbol: string) => {
+    try {
+      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const res = await fetch(`${base}/settings/symbols`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const list: string[] = (data?.symbols || []).map((s: string) => s.toUpperCase());
+      const symU = symbol.toUpperCase();
+      if (!list.includes(symU)) {
+        const merged = Array.from(new Set([...list, symU]));
+        await fetch(`${base}/settings/symbols`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols: merged })
+        });
+      }
+    } catch (e) {
+      // 静默失败，不阻塞前端渲染
+      console.warn('ensureSubscribed failed', e);
+    }
+  }, []);
+
+  // Load symbols from backend: merge settings symbols + portfolio positions
   useEffect(() => {
     const loadSymbols = async () => {
       try {
         const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
-        const response = await fetch(`${base}/settings/symbols`);
-        if (response.ok) {
-          const data = await response.json();
-          setSymbols(data.symbols || []);
-          if (data.symbols && data.symbols.length > 0) {
-            setSelectedSymbol(data.symbols[0]);
-          }
+        const [resSymbols, resPortfolio] = await Promise.all([
+          fetch(`${base}/settings/symbols`),
+          fetch(`${base}/portfolio/overview`)
+        ]);
+
+        const finalSet = new Set<string>();
+        if (resSymbols.ok) {
+          const data = await resSymbols.json();
+          (data.symbols || []).forEach((s: string) => finalSet.add(s));
+        }
+        if (resPortfolio.ok) {
+          const p = await resPortfolio.json();
+          (p.positions || []).forEach((pos: any) => {
+            if (pos?.symbol) finalSet.add(pos.symbol);
+          });
+        }
+
+        const merged = Array.from(finalSet);
+        if (merged.length === 0) {
+          const defaults = ['700.HK', '0005.HK', 'AAPL.US'];
+          setSymbols(defaults);
+          setSelectedSymbol(defaults[0]);
+        } else {
+          setSymbols(merged);
+          setSelectedSymbol(merged[0]);
         }
       } catch (error) {
-        console.error('Failed to load symbols:', error);
-        // Fallback to default symbols
+        console.error('Failed to load symbols/positions:', error);
         const defaults = ['700.HK', '0005.HK', 'AAPL.US'];
         setSymbols(defaults);
         setSelectedSymbol(defaults[0]);
@@ -188,23 +254,61 @@ export default function RealtimeKLinePage() {
       const response = await fetch(`${base}/quotes/history?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setHistoricalData(data.bars || []);
+        let bars = data.bars || [];
+
+        // Auto sync 1000 bars if empty, then refetch with larger limit
+        if (!bars.length) {
+          try {
+            await fetch(`${base}/quotes/history/sync`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ symbols: [selectedSymbol], period: 'day', adjust_type: 'forward_adjust', count: 1000 })
+            });
+            const refetch = await fetch(`${base}/quotes/history?${new URLSearchParams({ symbol: selectedSymbol, limit: '1000', period: 'day', adjust_type: 'forward_adjust' }).toString()}`);
+            if (refetch.ok) {
+              const refetched = await refetch.json();
+              bars = refetched.bars || [];
+            }
+          } catch (e) {
+            console.error('Sync history failed:', e);
+          }
+        }
+
+        setHistoricalData(bars);
 
         // Update chart with historical data
-        if (data.bars && data.bars.length > 0 && candlestickSeriesRef.current && volumeSeriesRef.current) {
-          const candlestickData = data.bars.map((bar: any) => ({
-            time: (bar.time || bar.ts).split('T')[0] as Time,
-            open: bar.open,
-            high: bar.high,
-            low: bar.low,
-            close: bar.close,
+        if (bars && bars.length > 0 && candlestickSeriesRef.current && volumeSeriesRef.current) {
+          const raw = bars as any[];
+          const filtered = raw.filter((bar) =>
+            [bar.open, bar.high, bar.low, bar.close].every((v: any) => typeof v === 'number' && Number.isFinite(v))
+          );
+
+          const toUnix = (s: any): Time => {
+            try {
+              if (typeof s === 'number') return (Math.floor(s / 1000) as Time);
+              const d = new Date(String(s));
+              if (!Number.isNaN(d.getTime())) return (Math.floor(d.getTime() / 1000) as Time);
+            } catch {}
+            return (Math.floor(Date.now() / 1000) as Time);
+          };
+
+          const candlestickData = filtered.map((bar: any) => ({
+            time: toUnix(bar.time || bar.ts),
+            open: bar.open as number,
+            high: bar.high as number,
+            low: bar.low as number,
+            close: bar.close as number,
           }));
 
-          const volumeData = data.bars.map((bar: any) => ({
-            time: (bar.time || bar.ts).split('T')[0] as Time,
-            value: bar.volume,
-            color: bar.close >= bar.open ? '#10b981' : '#ef4444',
+          const volumeData = filtered.map((bar: any) => ({
+            time: toUnix(bar.time || bar.ts),
+            value: (typeof bar.volume === 'number' && Number.isFinite(bar.volume)) ? bar.volume : 0,
+            color: (bar.close as number) >= (bar.open as number) ? '#10b981' : '#ef4444',
           }));
+
+          // Sort ascending by time (DuckDB query returns DESC)
+          candlestickData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
+          volumeData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
 
           // Sort by time
           candlestickData.sort((a, b) => (a.time as string).localeCompare(b.time as string));
@@ -232,8 +336,50 @@ export default function RealtimeKLinePage() {
   useEffect(() => {
     if (selectedSymbol) {
       loadHistoricalData();
+      // also ensure backend subscribes to this symbol for realtime quotes
+      ensureSubscribed(selectedSymbol);
     }
-  }, [selectedSymbol, loadHistoricalData]);
+  }, [selectedSymbol, loadHistoricalData, ensureSubscribed]);
+
+  // Render historicalData after chart is ready (covers effect ordering/race)
+  useEffect(() => {
+    if (!candlestickSeriesRef.current || !volumeSeriesRef.current) return;
+    if (!historicalData || historicalData.length === 0) return;
+
+    const toUnix = (s: any): Time => {
+      try {
+        if (typeof s === 'number') return (Math.floor(s / 1000) as Time);
+        const d = new Date(String(s));
+        if (!Number.isNaN(d.getTime())) return (Math.floor(d.getTime() / 1000) as Time);
+      } catch {}
+      return (Math.floor(Date.now() / 1000) as Time);
+    };
+
+    const filtered = (historicalData as any[]).filter((bar) =>
+      [bar.open, bar.high, bar.low, bar.close].every((v: any) => typeof v === 'number' && Number.isFinite(v))
+    );
+    const candlestickData = filtered.map((bar: any) => ({
+      time: toUnix((bar as any).time || (bar as any).ts),
+      open: bar.open as number,
+      high: bar.high as number,
+      low: bar.low as number,
+      close: bar.close as number,
+    }));
+    const volumeData = filtered.map((bar: any) => ({
+      time: toUnix((bar as any).time || (bar as any).ts),
+      value: (typeof bar.volume === 'number' && Number.isFinite(bar.volume)) ? bar.volume : 0,
+      color: (bar.close as number) >= (bar.open as number) ? '#10b981' : '#ef4444',
+    }));
+    candlestickData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
+    volumeData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
+
+    candlestickSeriesRef.current.setData(candlestickData);
+    volumeSeriesRef.current.setData(volumeData);
+    lastBarRef.current = candlestickData[candlestickData.length - 1] || null;
+    if (chartRef.current) {
+      chartRef.current.timeScale().fitContent();
+    }
+  }, [historicalData]);
 
   // WebSocket connection with improved stability
   useEffect(() => {
@@ -245,7 +391,7 @@ export default function RealtimeKLinePage() {
     const connectWebSocket = () => {
       if (!isActive) return;
 
-      const wsUrl = `ws://localhost:8000/ws/quotes`;
+      const wsUrl = resolveWsUrl('/ws/quotes');
       console.log(`Attempting WebSocket connection (attempt ${reconnectAttempts + 1})...`);
 
       setConnectionStatus('connecting');
@@ -265,32 +411,47 @@ export default function RealtimeKLinePage() {
             // Update quotes map
             setQuotes(prev => {
               const newQuotes = new Map(prev);
-              newQuotes.set(data.symbol, data);
+              const norm = normalizeSymbolHK(data.symbol);
+              const denorm = denormalizeSymbolHK(norm);
+              newQuotes.set(norm, data);
+              newQuotes.set(denorm, data);
               return newQuotes;
             });
 
             // Update real-time chart for selected symbol
-            if (data.symbol === selectedSymbol && candlestickSeriesRef.current && lastBarRef.current) {
+            const sameSymbol = normalizeSymbolHK(data.symbol) === normalizeSymbolHK(selectedSymbol);
+            if (sameSymbol && candlestickSeriesRef.current) {
               const currentDate = new Date().toISOString().split('T')[0];
 
               // Update or create today's bar
-              const updatedBar = {
-                time: currentDate as Time,
-                open: lastBarRef.current.open || data.open,
-                high: Math.max(lastBarRef.current.high || data.high, data.last_done),
-                low: Math.min(lastBarRef.current.low || data.low, data.last_done),
-                close: data.last_done,
-              };
-
-              candlestickSeriesRef.current.update(updatedBar);
-              lastBarRef.current = updatedBar;
+              if (lastBarRef.current) {
+                const updatedBar = {
+                  time: currentDate as Time,
+                  open: lastBarRef.current.open || data.open,
+                  high: Math.max(lastBarRef.current.high || data.high, data.last_done),
+                  low: Math.min(lastBarRef.current.low || data.low, data.last_done),
+                  close: data.last_done,
+                };
+                candlestickSeriesRef.current.update(updatedBar);
+                lastBarRef.current = updatedBar;
+              } else {
+                const newBar = {
+                  time: currentDate as Time,
+                  open: data.open ?? data.last_done,
+                  high: data.high ?? data.last_done,
+                  low: data.low ?? data.last_done,
+                  close: data.last_done,
+                };
+                candlestickSeriesRef.current.update(newBar);
+                lastBarRef.current = newBar;
+              }
 
               // Update volume
               if (volumeSeriesRef.current && data.volume) {
                 volumeSeriesRef.current.update({
                   time: currentDate as Time,
                   value: data.volume,
-                  color: data.last_done >= updatedBar.open ? '#10b981' : '#ef4444',
+                  color: data.last_done >= (lastBarRef.current?.open ?? data.open ?? data.last_done) ? '#10b981' : '#ef4444',
                 });
               }
             }

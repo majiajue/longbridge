@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Dict, List, Optional
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -139,3 +140,97 @@ class PortfolioOverviewResponse(BaseModel):
     positions: List[PortfolioPosition] = Field(default_factory=list)
     totals: PortfolioTotals
     account_balance: Dict[str, Dict] = Field(default_factory=dict)
+
+
+# Monitoring models
+class MonitoringStatus(str, Enum):
+    ENABLED = "enabled"
+    DISABLED = "disabled"
+    PAUSED = "paused"
+
+
+class StrategyMode(str, Enum):
+    CONSERVATIVE = "conservative"
+    BALANCED = "balanced"
+    AGGRESSIVE = "aggressive"
+    CUSTOM = "custom"
+
+
+class PositionMonitoringConfig(BaseModel):
+    symbol: str
+    monitoring_status: MonitoringStatus = MonitoringStatus.ENABLED
+    strategy_mode: StrategyMode = StrategyMode.BALANCED
+    enabled_strategies: List[str] = Field(default_factory=list)
+    max_position_ratio: float = Field(default=0.1, ge=0.01, le=1.0)
+    stop_loss_ratio: float = Field(default=0.05, ge=0.01, le=0.3)
+    take_profit_ratio: float = Field(default=0.1, ge=0.02, le=1.0)
+    cooldown_minutes: int = Field(default=30, ge=1, le=1440)
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class GlobalMonitoringSettings(BaseModel):
+    global_enabled: bool = True
+    market_hours_only: bool = True
+    max_daily_trades: int = Field(default=20, ge=1, le=100)
+    max_total_exposure: float = Field(default=0.8, ge=0.1, le=1.0)
+    emergency_stop: bool = False
+    risk_level: str = Field(default="medium")
+    notifications_enabled: bool = True
+    excluded_symbols: List[str] = Field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class PositionWithMonitoring(BaseModel):
+    symbol: str
+    symbol_name: Optional[str] = None
+    currency: Optional[str] = None
+    market: Optional[str] = None
+    qty: float
+    available_quantity: Optional[float] = None
+    avg_price: float
+    cost_value: float
+    last_price: Optional[float] = None
+    last_price_time: Optional[datetime] = None
+    market_value: float
+    pnl: float
+    pnl_percent: float
+    day_pnl: float = 0.0
+    day_pnl_percent: float = 0.0
+    account_channel: Optional[str] = None
+    direction: str
+    monitoring_config: Optional[PositionMonitoringConfig] = None
+
+
+class MonitoringConfigResponse(BaseModel):
+    positions: List[PositionWithMonitoring] = Field(default_factory=list)
+    global_settings: GlobalMonitoringSettings
+
+
+class UpdateMonitoringConfigRequest(BaseModel):
+    monitoring_status: Optional[MonitoringStatus] = None
+    strategy_mode: Optional[StrategyMode] = None
+    enabled_strategies: Optional[List[str]] = None
+    max_position_ratio: Optional[float] = None
+    stop_loss_ratio: Optional[float] = None
+    take_profit_ratio: Optional[float] = None
+    cooldown_minutes: Optional[int] = None
+    notes: Optional[str] = None
+
+
+class BatchMonitoringUpdateRequest(BaseModel):
+    symbols: List[str]
+    config: UpdateMonitoringConfigRequest
+
+
+class GlobalMonitoringUpdateRequest(BaseModel):
+    global_enabled: Optional[bool] = None
+    market_hours_only: Optional[bool] = None
+    max_daily_trades: Optional[int] = None
+    max_total_exposure: Optional[float] = None
+    emergency_stop: Optional[bool] = None
+    risk_level: Optional[str] = None
+    notifications_enabled: Optional[bool] = None
+    excluded_symbols: Optional[List[str]] = None

@@ -1,0 +1,38 @@
+---
+globs: backend/app/streaming.py,backend/app/main.py
+description: 行情流与 WebSocket 规范（QuoteStreamManager 与 /ws/quotes）
+---
+
+# 行情流与 WebSocket 规则
+
+核心职责：
+- `QuoteStreamManager` 负责：
+  - 订阅与管理 Longbridge 行情（`QuoteContext`）
+  - 维护监听队列，向所有队列广播 payload
+  - 跟踪状态与最近行情时间（`_last_quote_at`），对外提供 `snapshot()`
+  - 动态更新订阅（凭据变更重启、符号变更 reload）
+  - 周期性推送组合更新（`_run_portfolio_updates`）
+
+线程/事件循环：
+- 在 `startup` 中通过 `attach_loop(asyncio.get_running_loop())` 提供 loop
+- `ensure_started()` 在后台线程运行 `_run()`，并启动组合更新线程
+- `stop()` 会结束两条线程并广播停止状态
+
+广播数据格式：
+- 状态：`{"type":"status","status":str,"detail":str|null,"subscribed":[...],"last_quote_at":iso}`
+- 行情：`{"type":"quote","symbol":str, "last_done":float|null, ... , "timestamp":unix}`
+- 组合：`{"type":"portfolio_update", "timestamp":iso, "positions":[], "totals":{}, "account_balance":{}}`
+
+前端接入：
+- WebSocket 路径：`/ws/quotes`
+- 统一通过 `frontend/src/api/client.ts` 的 `resolveWsUrl()` 构造 WS 地址
+- 首条消息通常为 `type=status` 的快照
+
+扩展与变更：
+- 新增推送类型时，保持 `type` 字段稳定且向前兼容
+- 大对象频推送需节流或拆分（避免阻塞队列）；默认队列容量为 200
+- 行情标准化逻辑集中于 `_normalize_quote()`，涉及 symbol 归一化、涨跌幅计算
+
+参考：
+- [backend/app/streaming.py](mdc:backend/app/streaming.py)
+- [backend/app/main.py](mdc:backend/app/main.py)

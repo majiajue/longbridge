@@ -1,0 +1,237 @@
+{
+  "strategies": [
+    {
+      "id": "ma_crossover",
+      "name": "均线交叉策略",
+      "enabled": true,
+      "description": "基于短期和长期移动平均线交叉的趋势跟踪策略",
+      "symbols": ["700.HK", "AAPL.US"],
+      "conditions": {
+        "buy": [
+          {
+            "type": "ma_crossover",
+            "params": {
+              "short_period": 5,
+              "long_period": 20,
+              "direction": "golden_cross"
+            }
+          },
+          {
+            "type": "volume",
+            "params": {
+              "multiplier": 1.5,
+              "period": 5,
+              "operator": "greater_than"
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "ma_crossover",
+            "params": {
+              "short_period": 5,
+              "long_period": 20,
+              "direction": "death_cross"
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.05,
+        "take_profit": 0.15,
+        "position_size": 0.1,
+        "max_positions": 3
+      }
+    },
+    {
+      "id": "rsi_oversold",
+      "name": "RSI超卖反弹策略",
+      "enabled": false,
+      "description": "在RSI超卖时买入，超买时卖出的反转策略",
+      "symbols": ["0005.HK", "TSLA.US"],
+      "conditions": {
+        "buy": [
+          {
+            "type": "rsi",
+            "params": {
+              "period": 14,
+              "oversold": 30,
+              "operator": "less_than"
+            }
+          },
+          {
+            "type": "price_change",
+            "params": {
+              "period": 3,
+              "min_change": -0.05
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "rsi",
+            "params": {
+              "period": 14,
+              "overbought": 70,
+              "operator": "greater_than"
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.03,
+        "take_profit": 0.08,
+        "position_size": 0.15,
+        "max_positions": 2
+      }
+    },
+    {
+      "id": "breakout",
+      "name": "突破策略",
+      "enabled": false,
+      "description": "价格突破关键阻力位时买入的动量策略",
+      "symbols": ["9988.HK", "NVDA.US"],
+      "conditions": {
+        "buy": [
+          {
+            "type": "price_breakout",
+            "params": {
+              "period": 20,
+              "breakout_type": "resistance",
+              "confirmation_bars": 2
+            }
+          },
+          {
+            "type": "volume",
+            "params": {
+              "multiplier": 2.0,
+              "period": 10,
+              "operator": "greater_than"
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "price_breakout",
+            "params": {
+              "period": 20,
+              "breakout_type": "support",
+              "confirmation_bars": 1
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.04,
+        "take_profit": 0.12,
+        "position_size": 0.2,
+        "max_positions": 2,
+        "trailing_stop": 0.02
+      }
+    },
+    {
+      "id": "bollinger_bands",
+      "name": "布林带策略",
+      "enabled": false,
+      "description": "基于布林带的均值回归策略",
+      "symbols": ["MSFT.US", "GOOGL.US"],
+      "conditions": {
+        "buy": [
+          {
+            "type": "bollinger_bands",
+            "params": {
+              "period": 20,
+              "std_dev": 2,
+              "band": "lower",
+              "operator": "touch"
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "bollinger_bands",
+            "params": {
+              "period": 20,
+              "std_dev": 2,
+              "band": "upper",
+              "operator": "touch"
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.025,
+        "take_profit": 0.06,
+        "position_size": 0.25,
+        "max_positions": 2
+      }
+    },
+    {
+      "id": "macd_divergence",
+      "name": "MACD背离策略",
+      "enabled": false,
+      "description": "MACD指标背离信号的趋势反转策略",
+      "symbols": ["700.HK", "AAPL.US"],
+      "conditions": {
+        "buy": [
+          {
+            "type": "macd",
+            "params": {
+              "fast_period": 12,
+              "slow_period": 26,
+              "signal_period": 9,
+              "condition": "bullish_divergence"
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "macd",
+            "params": {
+              "fast_period": 12,
+              "slow_period": 26,
+              "signal_period": 9,
+              "condition": "bearish_divergence"
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.04,
+        "take_profit": 0.10,
+        "position_size": 0.15,
+        "max_positions": 3
+      }
+    }
+  ],
+  "global_settings": {
+    "max_daily_trades": 10,
+    "max_total_positions": 5,
+    "max_risk_per_trade": 0.02,
+    "trading_hours": {
+      "HK": {
+        "start": "09:30",
+        "end": "16:00"
+      },
+      "US": {
+        "start": "21:30",
+        "end": "04:00"
+      }
+    },
+    "cooldown_period": 300,
+    "min_volume": 1000000,
+    "order_type": "limit",
+    "slippage_tolerance": 0.001
+  },
+  "notification_settings": {
+    "enabled": true,
+    "channels": ["websocket", "log"],
+    "events": [
+      "strategy_triggered",
+      "order_placed",
+      "order_filled",
+      "stop_loss_triggered",
+      "take_profit_triggered"
+    ]
+  }
+}

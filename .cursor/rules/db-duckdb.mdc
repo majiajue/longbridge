@@ -1,0 +1,31 @@
+---
+globs: backend/app/db.py,backend/app/repositories.py
+description: DuckDB 与仓储层约定（表结构、迁移、读写与回退）
+---
+
+# DuckDB 与仓储层规则
+
+连接与迁移：
+- 使用 `db.get_connection()` 获取连接；函数内部会：
+  - 调用 `get_settings().ensure_dirs()` 保证目录存在
+  - 连接到 `settings.duckdb_path`
+  - 执行 `_run_migrations()`，确保以下表存在：`settings/symbols/ohlc/ticks/signals/orders/positions`
+  - 通过 `_ensure_column()` 进行列级补丁（如 `ticks.sequence/turnover/current_*`）
+
+读写约定：
+- 历史 K 线落库：`repositories.store_candlesticks(symbol, list)` → 表 `ohlc`
+- 最新价与 tick：`repositories.store_tick_event(symbol, event)` → 表 `ticks`（并可被组合页读取）
+- 读取最新价：`repositories.fetch_latest_prices(symbols)`，用于组合估值
+- 读取 ticks：`repositories.fetch_ticks(symbol, limit)`，用于前端明细
+
+回退策略：
+- 当 `repositories.fetch_candlesticks` 不存在时，`services.get_cached_candlesticks` 会退回到直接查询 DuckDB（`_fetch_candlesticks_from_db`）
+
+扩展建议：
+- 新增字段优先采用 `_ensure_column()` 以避免破坏性迁移
+- 写入路径要幂等/可重复执行（主键或唯一索引：如 `ohlc(symbol, ts)`）
+
+参考：
+- [backend/app/db.py](mdc:backend/app/db.py)
+- [backend/app/services.py](mdc:backend/app/services.py)
+- [backend/app/repositories.py](mdc:backend/app/repositories.py)

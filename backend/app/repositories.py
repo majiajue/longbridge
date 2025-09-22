@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 from typing import Dict, Iterable, List, Optional, Sequence
 
 from .config import get_settings
@@ -313,3 +314,315 @@ def _safe_float(value) -> float | None:
         return float(value)
     except (TypeError, ValueError):
         return None
+
+
+def _ensure_global_monitoring_columns(conn) -> None:
+    info = conn.execute("PRAGMA table_info('global_monitoring_settings')").fetchall()
+    columns = {row[1] for row in info}
+    if 'excluded_symbols' not in columns:
+        conn.execute("ALTER TABLE global_monitoring_settings ADD COLUMN excluded_symbols TEXT DEFAULT '[]'")
+        conn.execute("UPDATE global_monitoring_settings SET excluded_symbols = '[]' WHERE excluded_symbols IS NULL")
+    if 'created_at' not in columns:
+        conn.execute("ALTER TABLE global_monitoring_settings ADD COLUMN created_at TEXT")
+    if 'updated_at' not in columns:
+        conn.execute("ALTER TABLE global_monitoring_settings ADD COLUMN updated_at TEXT")
+
+
+# Monitoring repository functions
+def save_position_monitoring_config(config_data: Dict) -> None:
+    """Save or update position monitoring configuration"""
+    with get_connection() as conn:
+        # Create table if not exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS position_monitoring (
+                symbol TEXT PRIMARY KEY,
+                monitoring_status TEXT NOT NULL DEFAULT 'enabled',
+                strategy_mode TEXT NOT NULL DEFAULT 'balanced',
+                enabled_strategies TEXT NOT NULL DEFAULT '[]',
+                max_position_ratio REAL NOT NULL DEFAULT 0.1,
+                stop_loss_ratio REAL NOT NULL DEFAULT 0.05,
+                take_profit_ratio REAL NOT NULL DEFAULT 0.1,
+                cooldown_minutes INTEGER NOT NULL DEFAULT 30,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+
+        # Convert enabled_strategies list to JSON string
+        import json
+        enabled_strategies_json = json.dumps(config_data.get('enabled_strategies', []))
+
+        # Insert or update configuration
+        conn.execute("""
+            INSERT OR REPLACE INTO position_monitoring
+            (symbol, monitoring_status, strategy_mode, enabled_strategies, max_position_ratio,
+             stop_loss_ratio, take_profit_ratio, cooldown_minutes, notes, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            config_data['symbol'],
+            config_data.get('monitoring_status', 'enabled'),
+            config_data.get('strategy_mode', 'balanced'),
+            enabled_strategies_json,
+            config_data.get('max_position_ratio', 0.1),
+            config_data.get('stop_loss_ratio', 0.05),
+            config_data.get('take_profit_ratio', 0.1),
+            config_data.get('cooldown_minutes', 30),
+            config_data.get('notes'),
+            datetime.now().isoformat()
+        ])
+
+
+def get_position_monitoring_config(symbol: str) -> Optional[Dict]:
+    """Get position monitoring configuration for a specific symbol"""
+    with get_connection() as conn:
+        # Ensure table exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS position_monitoring (
+                symbol TEXT PRIMARY KEY,
+                monitoring_status TEXT NOT NULL DEFAULT 'enabled',
+                strategy_mode TEXT NOT NULL DEFAULT 'balanced',
+                enabled_strategies TEXT NOT NULL DEFAULT '[]',
+                max_position_ratio REAL NOT NULL DEFAULT 0.1,
+                stop_loss_ratio REAL NOT NULL DEFAULT 0.05,
+                take_profit_ratio REAL NOT NULL DEFAULT 0.1,
+                cooldown_minutes INTEGER NOT NULL DEFAULT 30,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+
+        row = conn.execute("""
+            SELECT symbol, monitoring_status, strategy_mode, enabled_strategies,
+                   max_position_ratio, stop_loss_ratio, take_profit_ratio,
+                   cooldown_minutes, notes, created_at, updated_at
+            FROM position_monitoring WHERE symbol = ?
+        """, [symbol]).fetchone()
+
+        if not row:
+            return None
+
+        import json
+        return {
+            'symbol': row[0],
+            'monitoring_status': row[1],
+            'strategy_mode': row[2],
+            'enabled_strategies': json.loads(row[3]) if row[3] else [],
+            'max_position_ratio': row[4],
+            'stop_loss_ratio': row[5],
+            'take_profit_ratio': row[6],
+            'cooldown_minutes': row[7],
+            'notes': row[8],
+            'created_at': row[9],
+            'updated_at': row[10]
+        }
+
+
+def get_all_monitoring_configs() -> List[Dict]:
+    """Get all position monitoring configurations"""
+    with get_connection() as conn:
+        # Ensure table exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS position_monitoring (
+                symbol TEXT PRIMARY KEY,
+                monitoring_status TEXT NOT NULL DEFAULT 'enabled',
+                strategy_mode TEXT NOT NULL DEFAULT 'balanced',
+                enabled_strategies TEXT NOT NULL DEFAULT '[]',
+                max_position_ratio REAL NOT NULL DEFAULT 0.1,
+                stop_loss_ratio REAL NOT NULL DEFAULT 0.05,
+                take_profit_ratio REAL NOT NULL DEFAULT 0.1,
+                cooldown_minutes INTEGER NOT NULL DEFAULT 30,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+
+        rows = conn.execute("""
+            SELECT symbol, monitoring_status, strategy_mode, enabled_strategies,
+                   max_position_ratio, stop_loss_ratio, take_profit_ratio,
+                   cooldown_minutes, notes, created_at, updated_at
+            FROM position_monitoring
+        """).fetchall()
+
+        import json
+        configs = []
+        for row in rows:
+            configs.append({
+                'symbol': row[0],
+                'monitoring_status': row[1],
+                'strategy_mode': row[2],
+                'enabled_strategies': json.loads(row[3]) if row[3] else [],
+                'max_position_ratio': row[4],
+                'stop_loss_ratio': row[5],
+                'take_profit_ratio': row[6],
+                'cooldown_minutes': row[7],
+                'notes': row[8],
+                'created_at': row[9],
+                'updated_at': row[10]
+            })
+        return configs
+
+
+def get_global_monitoring_settings() -> Dict:
+    """Get global monitoring settings"""
+    with get_connection() as conn:
+        # Create table if not exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS global_monitoring_settings (
+                id INTEGER PRIMARY KEY,
+                global_enabled BOOLEAN NOT NULL DEFAULT 1,
+                market_hours_only BOOLEAN NOT NULL DEFAULT 1,
+                max_daily_trades INTEGER NOT NULL DEFAULT 20,
+                max_total_exposure REAL NOT NULL DEFAULT 0.8,
+                emergency_stop BOOLEAN NOT NULL DEFAULT 0,
+                risk_level TEXT NOT NULL DEFAULT 'medium',
+                notifications_enabled BOOLEAN NOT NULL DEFAULT 1,
+                excluded_symbols TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+
+        _ensure_global_monitoring_columns(conn)
+
+        row = conn.execute("""
+            SELECT global_enabled, market_hours_only, max_daily_trades, max_total_exposure,
+                   emergency_stop, risk_level, notifications_enabled, excluded_symbols, created_at, updated_at
+            FROM global_monitoring_settings WHERE id = 1
+        """).fetchone()
+
+        if not row:
+            # Insert default settings
+            conn.execute("""
+                INSERT INTO global_monitoring_settings
+                (id, global_enabled, market_hours_only, max_daily_trades, max_total_exposure,
+                 emergency_stop, risk_level, notifications_enabled, excluded_symbols, created_at, updated_at)
+                VALUES (1, 1, 1, 20, 0.8, 0, 'medium', 1, '[]', ?, ?)
+            """, [datetime.now().isoformat(), datetime.now().isoformat()])
+
+            return {
+                'global_enabled': True,
+                'market_hours_only': True,
+                'max_daily_trades': 20,
+                'max_total_exposure': 0.8,
+                'emergency_stop': False,
+                'risk_level': 'medium',
+                'notifications_enabled': True,
+                'excluded_symbols': [],
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+
+        excluded_symbols = []
+        try:
+            if row[7]:
+                excluded_symbols = json.loads(row[7])
+        except (TypeError, ValueError):
+            excluded_symbols = []
+
+        return {
+            'global_enabled': bool(row[0]),
+            'market_hours_only': bool(row[1]),
+            'max_daily_trades': row[2],
+            'max_total_exposure': row[3],
+            'emergency_stop': bool(row[4]),
+            'risk_level': row[5],
+            'notifications_enabled': bool(row[6]),
+            'excluded_symbols': excluded_symbols,
+            'created_at': row[8],
+            'updated_at': row[9]
+        }
+
+
+def save_global_monitoring_settings(settings: Dict) -> None:
+    """Save global monitoring settings"""
+    with get_connection() as conn:
+        # Create table if not exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS global_monitoring_settings (
+                id INTEGER PRIMARY KEY,
+                global_enabled BOOLEAN NOT NULL DEFAULT 1,
+                market_hours_only BOOLEAN NOT NULL DEFAULT 1,
+                max_daily_trades INTEGER NOT NULL DEFAULT 20,
+                max_total_exposure REAL NOT NULL DEFAULT 0.8,
+                emergency_stop BOOLEAN NOT NULL DEFAULT 0,
+                risk_level TEXT NOT NULL DEFAULT 'medium',
+                notifications_enabled BOOLEAN NOT NULL DEFAULT 1,
+                excluded_symbols TEXT NOT NULL DEFAULT '[]',
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+
+        _ensure_global_monitoring_columns(conn)
+
+        existing = conn.execute(
+            "SELECT created_at FROM global_monitoring_settings WHERE id = 1"
+        ).fetchone()
+        created_at = existing[0] if existing and existing[0] else datetime.now().isoformat()
+        updated_at = datetime.now().isoformat()
+        excluded_symbols = settings.get('excluded_symbols', []) or []
+        excluded_json = json.dumps(excluded_symbols)
+
+        conn.execute(
+            """
+            INSERT INTO global_monitoring_settings (
+                id, global_enabled, market_hours_only, max_daily_trades, max_total_exposure,
+                emergency_stop, risk_level, notifications_enabled, excluded_symbols, created_at, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                global_enabled=excluded.global_enabled,
+                market_hours_only=excluded.market_hours_only,
+                max_daily_trades=excluded.max_daily_trades,
+                max_total_exposure=excluded.max_total_exposure,
+                emergency_stop=excluded.emergency_stop,
+                risk_level=excluded.risk_level,
+                notifications_enabled=excluded.notifications_enabled,
+                excluded_symbols=excluded.excluded_symbols,
+                updated_at=excluded.updated_at
+            """,
+            [
+                1,
+                settings.get('global_enabled', True),
+                settings.get('market_hours_only', True),
+                settings.get('max_daily_trades', 20),
+                settings.get('max_total_exposure', 0.8),
+                settings.get('emergency_stop', False),
+                settings.get('risk_level', 'medium'),
+                settings.get('notifications_enabled', True),
+                excluded_json,
+                created_at,
+                updated_at,
+            ],
+        )
+
+
+def get_active_monitoring_symbols() -> List[str]:
+    """Get list of symbols that have monitoring enabled"""
+    with get_connection() as conn:
+        # Ensure table exists
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS position_monitoring (
+                symbol TEXT PRIMARY KEY,
+                monitoring_status TEXT NOT NULL DEFAULT 'enabled',
+                strategy_mode TEXT NOT NULL DEFAULT 'balanced',
+                enabled_strategies TEXT NOT NULL DEFAULT '[]',
+                max_position_ratio REAL NOT NULL DEFAULT 0.1,
+                stop_loss_ratio REAL NOT NULL DEFAULT 0.05,
+                take_profit_ratio REAL NOT NULL DEFAULT 0.1,
+                cooldown_minutes INTEGER NOT NULL DEFAULT 30,
+                notes TEXT,
+                created_at TEXT,
+                updated_at TEXT
+            )
+        """)
+
+        rows = conn.execute("""
+            SELECT symbol FROM position_monitoring
+            WHERE monitoring_status = 'enabled'
+        """).fetchall()
+
+        return [row[0] for row in rows]

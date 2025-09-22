@@ -6,8 +6,10 @@ app/db.py
 app/exceptions.py
 app/main.py
 app/models.py
+app/position_monitor.py
 app/repositories.py
 app/services.py
+app/strategy_engine.py
 app/streaming.py
 app/routers/__init__.py
 app/routers/portfolio.py

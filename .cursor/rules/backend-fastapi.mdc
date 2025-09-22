@@ -1,0 +1,45 @@
+---
+globs: backend/**
+description: 后端 FastAPI 结构与约定（路由/模型/异常/生命周期）
+---
+
+# 后端 FastAPI 规则
+
+结构约定：
+- 应用入口：`backend/app/main.py`
+  - `@app.on_event("startup")` 中：
+    - `quote_stream_manager.attach_loop(loop)`
+    - `quote_stream_manager.ensure_started()`
+    - `get_position_monitor().start_monitoring()`
+  - `@app.on_event("shutdown")` 中：
+    - `await quote_stream_manager.stop()`
+    - `await get_position_monitor().stop_monitoring()`
+  - WebSocket：`/ws/quotes` 按 JSON 文本推送；`datetime` 等通过自定义 `default` 序列化
+
+- 路由放置在 `backend/app/routers/`：
+  - `settings.py`：凭据/符号 GET/PUT 与 `/verify`
+  - `quotes.py`：`/history/sync`、`/history`、`/ticks`、`/stream/status`
+  - `portfolio.py`：`/positions`、`/overview`
+
+- Pydantic 模型集中在 `backend/app/models.py`，优先在此新增/复用
+
+异常与依赖：
+- 未安装 longport SDK 时抛出 `LongbridgeDependencyMissing`，路由层统一映射为 503
+- 上游 API 错误抛出 `LongbridgeAPIError`，路由层统一映射为 502
+- 参数校验失败抛 `ValueError` 或 FastAPI 自带校验，映射为 400
+
+通用实践：
+- 与 longport 交互，请使用 `services._quote_context()` 以确保资源回收
+- DB 访问通过 `db.get_connection()` with 上下文；避免在路由中直接拼接 SQL
+- 新接口：
+  1) 在 `models.py` 定义请求/响应模型
+  2) 在 `services.py` 实现业务逻辑
+  3) 在 `routers/*` 暴露 API，捕获并转换异常
+
+参考：
+- [backend/app/main.py](mdc:backend/app/main.py)
+- [backend/app/routers/settings.py](mdc:backend/app/routers/settings.py)
+- [backend/app/routers/quotes.py](mdc:backend/app/routers/quotes.py)
+- [backend/app/routers/portfolio.py](mdc:backend/app/routers/portfolio.py)
+- [backend/app/models.py](mdc:backend/app/models.py)
+- [backend/app/services.py](mdc:backend/app/services.py)

@@ -1,0 +1,32 @@
+---
+globs: frontend/**
+description: 前端 React/Vite 使用规范（API 客户端与 WS URL）
+---
+
+# 前端规范
+
+环境与基础：
+- Vite 项目，API 基址来自 `VITE_API_BASE`（默认 `http://localhost:8000`）
+- 统一使用 `src/api/client.ts` 的封装方法进行 HTTP 请求与错误处理
+
+错误处理：
+- `handleResponse()` 统一解析响应；非 2xx 会尝试读取 JSON 并使用 `detail` 字段
+
+WebSocket：
+- 使用 `resolveWsUrl(path)` 自动根据 `VITE_API_BASE` 转换 `ws/wss` 协议
+- 行情流路径：`/ws/quotes`
+
+页面路由/Tab：
+- 顶部 Tab 在 `src/App.tsx`，包含：设置、实时、实时K线、历史、策略控制、持仓监控
+
+接口约定（示例）：
+- 凭据：`fetchCredentials()`、`updateCredentials()`
+- 符号：`fetchSymbols()`、`updateSymbols()`
+- 校验：`verifySettings()`
+- 历史：`syncHistory()`、`fetchHistory()`
+- 明细：`fetchTicks()`
+- 组合：`fetchPortfolioOverview()`（返回 `positions/totals/account_balance`）
+
+参考：
+- [frontend/src/api/client.ts](mdc:frontend/src/api/client.ts)
+- [frontend/src/App.tsx](mdc:frontend/src/App.tsx)

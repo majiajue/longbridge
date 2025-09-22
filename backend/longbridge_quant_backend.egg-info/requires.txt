@@ -1,6 +1,13 @@
 fastapi<0.112,>=0.110
 uvicorn[standard]<0.28,>=0.27
+websockets>=15.0
+httptools>=0.6.0
+watchfiles>=1.0
 duckdb>=1.0
 cryptography>=42
 pydantic-settings>=2.2
 python-dotenv>=1.0
+numpy>=1.24.0
+
+[:sys_platform != "win32"]
+uvloop>=0.20.0

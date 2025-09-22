@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { createChart, IChartApi, ISeriesApi, Time, CandlestickData as TVCandlestickData, ColorType } from 'lightweight-charts';
+import { resolveWsUrl } from '../api/client';
+import { resolveWsUrl } from '../api/client';
 
 interface RealtimeQuote {
   symbol: string;
@@ -45,6 +47,28 @@ export default function RealtimeChartPage() {
   const candlestickSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
   const realtimeBarsRef = useRef<Map<string, TVCandlestickData>>(new Map());
+
+  // Ensure the selected symbol is subscribed on backend
+  const ensureSubscribed = useCallback(async (symbol: string) => {
+    try {
+      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const res = await fetch(`${base}/settings/symbols`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const list: string[] = (data?.symbols || []).map((s: string) => s.toUpperCase());
+      const symU = symbol.toUpperCase();
+      if (!list.includes(symU)) {
+        const merged = Array.from(new Set([...list, symU]));
+        await fetch(`${base}/settings/symbols`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ symbols: merged })
+        });
+      }
+    } catch (e) {
+      console.warn('ensureSubscribed failed', e);
+    }
+  }, []);
 
   // Initialize chart
   useEffect(() => {
@@ -152,23 +176,46 @@ export default function RealtimeChartPage() {
       const response = await fetch(`${base}/quotes/history?${params}`);
       if (response.ok) {
         const data = await response.json();
-        setHistoricalData(data.bars || []);
+        let bars = data.bars || [];
+
+        if (!bars.length) {
+          try {
+            await fetch(`${base}/quotes/history/sync`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ symbols: [selectedSymbol], period: 'min1', adjust_type: 'no_adjust', count: 1000 })
+            });
+            const refetch = await fetch(`${base}/quotes/history?${new URLSearchParams({ symbol: selectedSymbol, limit: '1000', period: 'min1', adjust_type: 'no_adjust' }).toString()}`);
+            if (refetch.ok) {
+              const refetched = await refetch.json();
+              bars = refetched.bars || [];
+            }
+          } catch (e) {
+            console.error('Sync minute history failed:', e);
+          }
+        }
+
+        setHistoricalData(bars);
 
         // Update chart with historical data
-        if (data.bars && data.bars.length > 0 && candlestickSeriesRef.current && volumeSeriesRef.current) {
-          const candlestickData = data.bars.map((bar: CandlestickBar) => ({
-            time: (Date.parse(bar.time) / 1000) as Time,
+        if (bars && bars.length > 0 && candlestickSeriesRef.current && volumeSeriesRef.current) {
+          const candlestickData = bars.map((bar: CandlestickBar) => ({
+            time: (Date.parse((bar as any).time || (bar as any).ts) / 1000) as Time,
             open: bar.open,
             high: bar.high,
             low: bar.low,
             close: bar.close,
           }));
 
-          const volumeData = data.bars.map((bar: CandlestickBar) => ({
-            time: (Date.parse(bar.time) / 1000) as Time,
+          const volumeData = bars.map((bar: CandlestickBar) => ({
+            time: (Date.parse((bar as any).time || (bar as any).ts) / 1000) as Time,
             value: bar.volume,
             color: bar.close >= bar.open ? '#10b981' : '#ef4444',
           }));
+
+          // Sort ascending by time to display correctly
+          candlestickData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
+          volumeData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
 
           candlestickSeriesRef.current.setData(candlestickData);
           volumeSeriesRef.current.setData(volumeData);
@@ -199,7 +246,7 @@ export default function RealtimeChartPage() {
   // WebSocket connection for real-time data
   useEffect(() => {
     const connectWebSocket = () => {
-      const wsUrl = `ws://localhost:8000/ws/quotes`;
+      const wsUrl = resolveWsUrl('/ws/quotes');
 
       setConnectionStatus('connecting');
       const ws = new WebSocket(wsUrl);
@@ -247,6 +294,23 @@ export default function RealtimeChartPage() {
                     color: data.last_done >= lastBar.open ? '#10b981' : '#ef4444',
                   });
                 }
+              } else {
+                const initialBar: TVCandlestickData = {
+                  time: currentTime,
+                  open: data.open ?? data.last_done,
+                  high: data.high ?? data.last_done,
+                  low: data.low ?? data.last_done,
+                  close: data.last_done,
+                };
+                candlestickSeriesRef.current.update(initialBar);
+                realtimeBarsRef.current.set(selectedSymbol, initialBar);
+                if (data.volume) {
+                  volumeSeriesRef.current.update({
+                    time: currentTime,
+                    value: data.volume,
+                    color: data.last_done >= (initialBar.open ?? data.last_done) ? '#10b981' : '#ef4444',
+                  });
+                }
               }
             }
           }
@@ -284,6 +348,11 @@ export default function RealtimeChartPage() {
       }
     };
   }, [selectedSymbol]);
+
+  // subscribe on symbol change
+  useEffect(() => {
+    ensureSubscribed(selectedSymbol);
+  }, [selectedSymbol, ensureSubscribed]);
 
   // Calculate current quote stats
   const currentQuote = quotes.get(selectedSymbol);

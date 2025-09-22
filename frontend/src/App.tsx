@@ -3,8 +3,10 @@ import SettingsPage from "./pages/Settings";
 import RealtimePage from "./pages/Realtime";
 import HistoryPage from "./pages/History";
 import RealtimeKLinePage from "./pages/RealtimeKLine";
+import StrategyControlPage from "./pages/StrategyControl";
+import PositionMonitoringPage from "./pages/PositionMonitoring";
 
-type TabType = "settings" | "realtime" | "history" | "realtime-chart";
+type TabType = "settings" | "realtime" | "history" | "realtime-chart" | "strategy" | "monitoring";
 
 interface TabItem {
   id: TabType;
@@ -17,6 +19,8 @@ const tabs: TabItem[] = [
   { id: "realtime", label: "实时行情", icon: "📊" },
   { id: "realtime-chart", label: "实时K线", icon: "📉" },
   { id: "history", label: "历史K线", icon: "📈" },
+  { id: "strategy", label: "策略控制", icon: "🤖" },
+  { id: "monitoring", label: "持仓监控", icon: "👁️" },
 ];
 
 export default function App() {
@@ -107,6 +111,8 @@ export default function App() {
           {activeTab === "realtime" && <RealtimePage />}
           {activeTab === "realtime-chart" && <RealtimeKLinePage />}
           {activeTab === "history" && <HistoryPage />}
+          {activeTab === "strategy" && <StrategyControlPage />}
+          {activeTab === "monitoring" && <PositionMonitoringPage />}
         </div>
       </main>
 

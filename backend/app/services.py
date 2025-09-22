@@ -6,9 +6,9 @@ from typing import Dict, Iterable, List, Optional
 
 from fastapi import HTTPException
 
+from .db import get_connection
 from .exceptions import LongbridgeAPIError, LongbridgeDependencyMissing
 from .repositories import (
-    fetch_candlesticks,
     fetch_latest_prices,
     load_credentials,
     load_symbols,
@@ -16,8 +16,14 @@ from .repositories import (
     _safe_float,
 )
 
+try:
+    from .repositories import fetch_candlesticks as _repo_fetch_candlesticks
+except ImportError:  # pragma: no cover - fallback when symbol is missing
+    _repo_fetch_candlesticks = None
+
 
 logger = logging.getLogger(__name__)
+_candlestick_fallback_warned = False
 
 _PERIOD_NAME_MAP = {
     "min1": "Min_1",
@@ -157,10 +163,38 @@ def sync_history_candlesticks(
     return results
 
 
+def _fetch_candlesticks_from_db(symbol: str, limit: int) -> List[Dict[str, float]]:
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT ts, open, high, low, close, volume, turnover FROM ohlc WHERE symbol = ? ORDER BY ts DESC LIMIT ?",
+            [symbol, limit],
+        ).fetchall()
+    return [
+        {
+            "ts": row[0],
+            "open": row[1],
+            "high": row[2],
+            "low": row[3],
+            "close": row[4],
+            "volume": row[5],
+            "turnover": row[6],
+        }
+        for row in rows
+    ]
+
+
 def get_cached_candlesticks(symbol: str, limit: int = 200) -> List[Dict[str, float]]:
     if limit <= 0:
         raise ValueError("limit 必须大于 0")
-    return fetch_candlesticks(symbol, limit)
+
+    if _repo_fetch_candlesticks is not None:
+        return _repo_fetch_candlesticks(symbol, limit)
+
+    global _candlestick_fallback_warned
+    if not _candlestick_fallback_warned:
+        logger.warning("fetch_candlesticks not exported by app.repositories; using direct DuckDB fallback")
+        _candlestick_fallback_warned = True
+    return _fetch_candlesticks_from_db(symbol, limit)
 
 
 def _build_longport_config(creds: Dict[str, str]):

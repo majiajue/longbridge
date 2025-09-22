@@ -10,6 +10,8 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from .exceptions import LongbridgeDependencyMissing
 from .repositories import load_credentials, load_symbols, store_tick_event
 from .services import get_portfolio_overview
+from .strategy_engine import get_strategy_engine
+from .position_monitor import get_position_monitor
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +158,35 @@ class QuoteStreamManager:
                 pass
         await queue.put(payload)
 
+    async def _process_strategy_quote(self, symbol: str, payload: Dict[str, Any]) -> None:
+        """Process quote data for strategy engine and position monitor"""
+        try:
+            if payload.get('type') != 'quote':
+                return
+
+            # Process in strategy engine
+            engine = get_strategy_engine()
+
+            # Convert quote data to K-line bar format
+            bar = {
+                'open': payload.get('open', 0),
+                'high': payload.get('high', 0),
+                'low': payload.get('low', 0),
+                'close': payload.get('last_done', 0),
+                'volume': payload.get('volume', 0),
+                'timestamp': payload.get('timestamp', 0)
+            }
+
+            # Process in strategy engine
+            await engine.process_kline(symbol, bar)
+
+            # Process in position monitor for position-based monitoring
+            monitor = get_position_monitor()
+            await monitor.process_quote(symbol, payload)
+
+        except Exception as e:
+            logger.error(f"Error processing strategy quote for {symbol}: {e}")
+
     def _run(self) -> None:
         while self._running:
             if not self._loop:
@@ -210,6 +241,12 @@ class QuoteStreamManager:
                     payload = self._normalize_quote(symbol, event)
                     store_tick_event(symbol, event)
                     self._broadcast(payload)
+
+                    # Process quote for strategy engine
+                    asyncio.run_coroutine_threadsafe(
+                        self._process_strategy_quote(symbol, payload),
+                        self._loop
+                    )
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.exception("处理行情推送失败", exc_info=exc)
 
@@ -312,6 +349,7 @@ class QuoteStreamManager:
         sequence = getattr(event, "sequence", None)
         timestamp = getattr(event, "timestamp", None)
         ts_iso: Optional[str] = None
+        ts_dt: datetime
 
         # Use current time if timestamp is not provided
         if timestamp:
@@ -322,6 +360,9 @@ class QuoteStreamManager:
                     self._last_quote_at = ts_dt
             except Exception:  # pragma: no cover - guard
                 ts_iso = None
+                ts_dt = datetime.now(timezone.utc)
+                with self._lock:
+                    self._last_quote_at = ts_dt
         else:
             # Use current time as fallback
             ts_dt = datetime.now(timezone.utc)
@@ -341,7 +382,7 @@ class QuoteStreamManager:
             change_rate = (change_value / prev_close) * 100
 
         # Convert timestamp to Unix timestamp for frontend compatibility
-        timestamp_unix = int(ts_dt.timestamp()) if ts_dt else int(datetime.now(timezone.utc).timestamp())
+        timestamp_unix = int(ts_dt.timestamp())
 
         data = {
             "type": "quote",
