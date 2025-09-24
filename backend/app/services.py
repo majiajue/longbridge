@@ -15,6 +15,7 @@ from .repositories import (
     store_candlesticks,
     _safe_float,
 )
+from .repositories import fetch_bars_from_ticks
 
 try:
     from .repositories import fetch_candlesticks as _repo_fetch_candlesticks
@@ -188,13 +189,26 @@ def get_cached_candlesticks(symbol: str, limit: int = 200) -> List[Dict[str, flo
         raise ValueError("limit 必须大于 0")
 
     if _repo_fetch_candlesticks is not None:
-        return _repo_fetch_candlesticks(symbol, limit)
+        bars = _repo_fetch_candlesticks(symbol, limit)
+        if bars:
+            return bars
+        # If no OHLC cached yet, try building minute bars from ticks
+        tick_bars = fetch_bars_from_ticks(symbol, min(limit, 500))
+        if tick_bars:
+            return tick_bars
+        return []
 
     global _candlestick_fallback_warned
     if not _candlestick_fallback_warned:
         logger.warning("fetch_candlesticks not exported by app.repositories; using direct DuckDB fallback")
         _candlestick_fallback_warned = True
-    return _fetch_candlesticks_from_db(symbol, limit)
+    bars = _fetch_candlesticks_from_db(symbol, limit)
+    if bars:
+        return bars
+    tick_bars = fetch_bars_from_ticks(symbol, min(limit, 500))
+    if tick_bars:
+        return tick_bars
+    return []
 
 
 def _build_longport_config(creds: Dict[str, str]):

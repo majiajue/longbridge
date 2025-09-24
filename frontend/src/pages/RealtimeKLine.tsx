@@ -44,6 +44,7 @@ export default function RealtimeKLinePage() {
   const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
   const [historicalData, setHistoricalData] = useState<CandlestickBar[]>([]);
   const [loading, setLoading] = useState(true);
+  const [chartReady, setChartReady] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
@@ -230,10 +231,31 @@ export default function RealtimeKLinePage() {
     const observer = new MutationObserver(handleThemeChange);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
 
+    // Observe container size changes to fix initial 0-width render in flex/layout transitions
+    let resizeObs: ResizeObserver | null = null;
+    if (chartContainerRef.current && 'ResizeObserver' in window) {
+      resizeObs = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const w = Math.floor(entry.contentRect.width);
+          if (w > 0) {
+            chart.applyOptions({ width: w });
+          }
+        }
+      });
+      resizeObs.observe(chartContainerRef.current);
+    }
+
+    setChartReady(true);
+
     return () => {
       window.removeEventListener('resize', handleResize);
       observer.disconnect();
+      if (resizeObs && chartContainerRef.current) {
+        try { resizeObs.unobserve(chartContainerRef.current); } catch {}
+      }
+      resizeObs = null;
       chart.remove();
+      setChartReady(false);
     };
   }, []);
 
@@ -246,9 +268,9 @@ export default function RealtimeKLinePage() {
       const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
       const params = new URLSearchParams({
         symbol: selectedSymbol,
-        limit: '200',
-        period: 'day',
-        adjust_type: 'forward_adjust'
+        limit: '1000',
+        period: 'min1',
+        adjust_type: 'no_adjust'
       });
 
       const response = await fetch(`${base}/quotes/history?${params}`);
@@ -256,15 +278,15 @@ export default function RealtimeKLinePage() {
         const data = await response.json();
         let bars = data.bars || [];
 
-        // Auto sync 1000 bars if empty, then refetch with larger limit
+        // Auto sync if empty (best-effort), then refetch
         if (!bars.length) {
           try {
             await fetch(`${base}/quotes/history/sync`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ symbols: [selectedSymbol], period: 'day', adjust_type: 'forward_adjust', count: 1000 })
+              body: JSON.stringify({ symbols: [selectedSymbol], period: 'min1', adjust_type: 'no_adjust', count: 1000 })
             });
-            const refetch = await fetch(`${base}/quotes/history?${new URLSearchParams({ symbol: selectedSymbol, limit: '1000', period: 'day', adjust_type: 'forward_adjust' }).toString()}`);
+            const refetch = await fetch(`${base}/quotes/history?${new URLSearchParams({ symbol: selectedSymbol, limit: '1000', period: 'min1', adjust_type: 'no_adjust' }).toString()}`);
             if (refetch.ok) {
               const refetched = await refetch.json();
               bars = refetched.bars || [];
@@ -306,13 +328,9 @@ export default function RealtimeKLinePage() {
             color: (bar.close as number) >= (bar.open as number) ? '#10b981' : '#ef4444',
           }));
 
-          // Sort ascending by time (DuckDB query returns DESC)
+          // Sort ascending by time (server returns DESC)
           candlestickData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
           volumeData.sort((a, b) => Number(a.time as number) - Number(b.time as number));
-
-          // Sort by time
-          candlestickData.sort((a, b) => (a.time as string).localeCompare(b.time as string));
-          volumeData.sort((a, b) => (a.time as string).localeCompare(b.time as string));
 
           candlestickSeriesRef.current.setData(candlestickData);
           volumeSeriesRef.current.setData(volumeData);
@@ -343,6 +361,7 @@ export default function RealtimeKLinePage() {
 
   // Render historicalData after chart is ready (covers effect ordering/race)
   useEffect(() => {
+    if (!chartReady) return;
     if (!candlestickSeriesRef.current || !volumeSeriesRef.current) return;
     if (!historicalData || historicalData.length === 0) return;
 
@@ -379,7 +398,7 @@ export default function RealtimeKLinePage() {
     if (chartRef.current) {
       chartRef.current.timeScale().fitContent();
     }
-  }, [historicalData]);
+  }, [historicalData, chartReady]);
 
   // WebSocket connection with improved stability
   useEffect(() => {
@@ -421,26 +440,28 @@ export default function RealtimeKLinePage() {
             // Update real-time chart for selected symbol
             const sameSymbol = normalizeSymbolHK(data.symbol) === normalizeSymbolHK(selectedSymbol);
             if (sameSymbol && candlestickSeriesRef.current) {
-              const currentDate = new Date().toISOString().split('T')[0];
+              // Use minute bucket for real-time K-line updates
+              const ts = typeof data.timestamp === 'number' ? data.timestamp : Math.floor(Date.now() / 1000);
+              const minuteStart = Math.floor(ts / 60) * 60; // start of the minute (UTC)
 
               // Update or create today's bar
-              if (lastBarRef.current) {
+              if (lastBarRef.current && lastBarRef.current.time === minuteStart) {
                 const updatedBar = {
-                  time: currentDate as Time,
-                  open: lastBarRef.current.open || data.open,
-                  high: Math.max(lastBarRef.current.high || data.high, data.last_done),
-                  low: Math.min(lastBarRef.current.low || data.low, data.last_done),
+                  time: minuteStart as Time,
+                  open: lastBarRef.current.open || data.open || data.last_done,
+                  high: Math.max(lastBarRef.current.high || data.high || data.last_done, data.last_done),
+                  low: Math.min(lastBarRef.current.low || data.low || data.last_done, data.last_done),
                   close: data.last_done,
                 };
                 candlestickSeriesRef.current.update(updatedBar);
                 lastBarRef.current = updatedBar;
               } else {
                 const newBar = {
-                  time: currentDate as Time,
-                  open: data.open ?? data.last_done,
-                  high: data.high ?? data.last_done,
-                  low: data.low ?? data.last_done,
-                  close: data.last_done,
+                  time: minuteStart as Time,
+                  open: (data.open ?? data.last_done) as number,
+                  high: (data.high ?? data.last_done) as number,
+                  low: (data.low ?? data.last_done) as number,
+                  close: data.last_done as number,
                 };
                 candlestickSeriesRef.current.update(newBar);
                 lastBarRef.current = newBar;
@@ -449,7 +470,7 @@ export default function RealtimeKLinePage() {
               // Update volume
               if (volumeSeriesRef.current && data.volume) {
                 volumeSeriesRef.current.update({
-                  time: currentDate as Time,
+                  time: minuteStart as Time,
                   value: data.volume,
                   color: data.last_done >= (lastBarRef.current?.open ?? data.open ?? data.last_done) ? '#10b981' : '#ef4444',
                 });

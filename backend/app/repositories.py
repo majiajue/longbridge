@@ -141,6 +141,83 @@ def fetch_candlesticks(symbol: str, limit: int) -> List[Dict[str, float]]:
     ]
 
 
+def fetch_bars_from_ticks(symbol: str, limit: int) -> List[Dict[str, Optional[float]]]:
+    """Aggregate recent ticks into minute bars as a fallback for K-line.
+
+    This produces approximate intraday candlesticks using tick data when
+    historical OHLC has not been synced yet. It returns at most `limit`
+    most recent minute bars.
+    """
+    with get_connection() as conn:
+        # Narrow the scan range to recent data to improve performance.
+        # We approximate a window that will cover at least `limit` minutes.
+        # Use last 3 days as a safe upper bound for 1000 minute bars.
+        max_row = conn.execute(
+            "SELECT max(ts) FROM ticks WHERE symbol = ?",
+            [symbol],
+        ).fetchone()
+        cutoff = None
+        if max_row and max_row[0]:
+            try:
+                from datetime import timedelta
+
+                cutoff = max_row[0] - timedelta(days=3)
+            except Exception:
+                cutoff = None
+
+        params: List[object] = [symbol]
+        filter_sql = ""
+        if cutoff is not None:
+            filter_sql = " AND ts >= ?"
+            params.append(cutoff)
+        params.append(limit)
+
+        rows = conn.execute(
+            f"""
+            WITH base AS (
+                SELECT ts, price,
+                       COALESCE(current_volume, volume, 0) AS vol
+                FROM ticks
+                WHERE symbol = ? AND price IS NOT NULL{filter_sql}
+            ),
+            g AS (
+                SELECT date_trunc('minute', ts) AS t,
+                       min(ts) AS min_ts,
+                       max(ts) AS max_ts,
+                       max(price) AS high,
+                       min(price) AS low,
+                       sum(vol) AS volume
+                FROM base
+                GROUP BY 1
+                ORDER BY 1 DESC
+                LIMIT ?
+            )
+            SELECT g.t AS ts,
+                   (SELECT price FROM base WHERE ts = g.min_ts LIMIT 1) AS open,
+                   g.high AS high,
+                   g.low AS low,
+                   (SELECT price FROM base WHERE ts = g.max_ts LIMIT 1) AS close,
+                   g.volume AS volume
+            FROM g
+            ORDER BY ts DESC
+            """,
+            params,
+        ).fetchall()
+
+    return [
+        {
+            "ts": row[0],
+            "open": row[1],
+            "high": row[2],
+            "low": row[3],
+            "close": row[4],
+            "volume": row[5],
+            "turnover": None,
+        }
+        for row in rows
+    ]
+
+
 def save_positions(positions: Sequence[Dict[str, float]]) -> None:
     timestamp = datetime.utcnow()
     normalized = []

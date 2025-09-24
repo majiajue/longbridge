@@ -34,6 +34,25 @@ async def analyze_symbol_signals(
         buffer = KLineBuffer(symbol=symbol, max_size=len(candlesticks))
 
         for candle in reversed(candlesticks):  # Reverse to get chronological order
+            # Robust timestamp handling: support datetime, numeric epoch (s or ms), or ISO string
+            ts_raw = candle.get('ts')
+            ts_dt: datetime
+            if isinstance(ts_raw, datetime):
+                ts_dt = ts_raw
+            else:
+                try:
+                    # If it's a large integer, assume ms; otherwise seconds
+                    if isinstance(ts_raw, (int, float)):
+                        ts_val = float(ts_raw)
+                        if ts_val > 1e12:  # ms epoch
+                            ts_dt = datetime.fromtimestamp(ts_val / 1000.0)
+                        else:
+                            ts_dt = datetime.fromtimestamp(ts_val)
+                    else:
+                        ts_dt = datetime.fromisoformat(str(ts_raw))
+                except Exception:
+                    ts_dt = datetime.now()
+
             market_data = MarketData(
                 symbol=symbol,
                 open=candle['open'],
@@ -41,7 +60,7 @@ async def analyze_symbol_signals(
                 low=candle['low'],
                 close=candle['close'],
                 volume=candle['volume'],
-                timestamp=datetime.fromtimestamp(candle['ts'])
+                timestamp=ts_dt,
             )
             buffer.add(market_data)
 
@@ -160,37 +179,60 @@ async def analyze_batch_signals(
 
 @router.get("/market_overview")
 async def get_market_overview() -> Dict[str, Any]:
-    """获取市场概览和信号统计"""
+    """获取基于实际持仓的市场概览和信号统计"""
     try:
-        # Get configured symbols
+        # Get actual positions
+        from ..services import get_positions
+        positions = get_positions()
+
+        # Get configured symbols for monitoring
         symbols = load_symbols()
-        if not symbols:
+
+        # Create symbol sets for different analysis
+        held_symbols = {pos['symbol'] for pos in positions if pos.get('qty', 0) != 0}
+        monitored_symbols = set(symbols) if symbols else set()
+        all_analysis_symbols = held_symbols.union(monitored_symbols)
+
+        if not all_analysis_symbols:
             return {
                 "total_symbols": 0,
                 "signals_summary": {},
-                "message": "No symbols configured"
+                "message": "No positions or configured symbols found"
             }
 
-        # Analyze all symbols
-        buy_signals = []
-        sell_signals = []
+        # Analyze symbols based on position status
+        buy_signals = []   # For symbols not held
+        sell_signals = []  # For symbols currently held
         analysis_errors = 0
 
-        for symbol in symbols[:10]:  # Limit to first 10 symbols to avoid timeout
+        for symbol in list(all_analysis_symbols)[:15]:  # Limit to avoid timeout
             try:
-                analysis = await analyze_symbol_signals(symbol, "both", 30)
+                # Check if we currently hold this symbol
+                position = next((pos for pos in positions if pos['symbol'] == symbol), None)
+                is_held = position and position.get('qty', 0) != 0
 
-                if analysis["signals"]["buy"]:
-                    buy_signals.append({
-                        "symbol": symbol,
-                        **analysis["signals"]["buy"]
-                    })
-
-                if analysis["signals"]["sell"]:
-                    sell_signals.append({
-                        "symbol": symbol,
-                        **analysis["signals"]["sell"]
-                    })
+                if is_held:
+                    # For held positions, only analyze sell signals
+                    analysis = await analyze_symbol_signals(symbol, "sell", 30)
+                    if analysis["signals"]["sell"]:
+                        sell_signal = {
+                            "symbol": symbol,
+                            "position_qty": position.get('qty', 0),
+                            "avg_cost": position.get('avg_price', 0),
+                            "current_pnl": position.get('pnl', 0) if 'pnl' in position else 0,
+                            **analysis["signals"]["sell"]
+                        }
+                        sell_signals.append(sell_signal)
+                else:
+                    # For non-held symbols, only analyze buy signals
+                    analysis = await analyze_symbol_signals(symbol, "buy", 30)
+                    if analysis["signals"]["buy"]:
+                        buy_signal = {
+                            "symbol": symbol,
+                            "is_new_opportunity": True,
+                            **analysis["signals"]["buy"]
+                        }
+                        buy_signals.append(buy_signal)
 
             except Exception:
                 analysis_errors += 1
@@ -206,26 +248,36 @@ async def get_market_overview() -> Dict[str, Any]:
 
         return {
             "analysis_time": datetime.now().isoformat(),
-            "total_symbols": len(symbols),
-            "analyzed_symbols": len(symbols) - analysis_errors,
+            "total_positions": len(held_symbols),
+            "total_monitored": len(monitored_symbols),
+            "analyzed_symbols": len(all_analysis_symbols) - analysis_errors,
             "analysis_errors": analysis_errors,
+            "portfolio_summary": {
+                "held_positions": len(held_symbols),
+                "profitable_positions": len([pos for pos in positions if pos.get('pnl', 0) > 0]),
+                "losing_positions": len([pos for pos in positions if pos.get('pnl', 0) < 0]),
+                "total_pnl": sum(pos.get('pnl', 0) for pos in positions)
+            },
             "signals_summary": {
-                "buy_signals": {
-                    "total": len(buy_signals),
-                    "strong": len(strong_buy_signals),
-                    "average_confidence": sum(s["confidence"] for s in buy_signals) / len(buy_signals) if buy_signals else 0,
-                    "top_signals": top_buy_signals
-                },
                 "sell_signals": {
                     "total": len(sell_signals),
                     "strong": len(strong_sell_signals),
                     "average_confidence": sum(s["confidence"] for s in sell_signals) / len(sell_signals) if sell_signals else 0,
-                    "top_signals": top_sell_signals
+                    "top_signals": top_sell_signals,
+                    "description": "基于当前持仓的卖出建议"
+                },
+                "buy_signals": {
+                    "total": len(buy_signals),
+                    "strong": len(strong_buy_signals),
+                    "average_confidence": sum(s["confidence"] for s in buy_signals) / len(buy_signals) if buy_signals else 0,
+                    "top_signals": top_buy_signals,
+                    "description": "新的买入机会"
                 }
             },
             "market_sentiment": {
-                "bullish_ratio": len(buy_signals) / (len(buy_signals) + len(sell_signals)) if (buy_signals or sell_signals) else 0.5,
-                "sentiment_score": (len(strong_buy_signals) - len(strong_sell_signals)) / max(1, len(symbols))
+                "action_bias": "sell_focused" if len(sell_signals) > len(buy_signals) else "buy_focused",
+                "risk_level": "high" if len(strong_sell_signals) > 2 else "normal",
+                "opportunity_score": len(strong_buy_signals) * 10 + len(buy_signals) * 5
             }
         }
 
@@ -322,6 +374,142 @@ async def get_factors_explanation() -> Dict[str, Any]:
             "0.6以下": "低置信度，不建议操作"
         }
     }
+
+@router.get("/portfolio/positions")
+async def analyze_portfolio_positions() -> Dict[str, Any]:
+    """基于实际持仓分析所有持仓的买卖信号"""
+    try:
+        from ..services import get_positions
+        positions = get_positions()
+
+        if not positions:
+            return {
+                "message": "No positions found",
+                "positions_analysis": []
+            }
+
+        analysis_results = []
+
+        for position in positions:
+            symbol = position['symbol']
+            qty = position.get('qty', 0)
+
+            # Skip zero positions
+            if qty == 0:
+                continue
+
+            try:
+                # Analyze sell signal for current position
+                analysis = await analyze_symbol_signals(symbol, "sell", 30)
+
+                # Calculate position info
+                avg_cost = position.get('avg_price', 0)
+                current_price = analysis.get('current_price', avg_cost)
+                pnl_amount = (current_price - avg_cost) * qty if avg_cost > 0 else 0
+                pnl_percent = ((current_price - avg_cost) / avg_cost * 100) if avg_cost > 0 else 0
+
+                position_analysis = {
+                    "symbol": symbol,
+                    "symbol_name": position.get('symbol_name', symbol),
+                    "position_info": {
+                        "quantity": qty,
+                        "avg_cost": avg_cost,
+                        "current_price": current_price,
+                        "pnl_amount": pnl_amount,
+                        "pnl_percent": pnl_percent,
+                        "market_value": current_price * qty,
+                        "direction": "long" if qty > 0 else "short",
+                        "currency": position.get('currency', 'USD')
+                    },
+                    "sell_signal": analysis.get("signals", {}).get("sell"),
+                    "recommendation": None,
+                    "risk_level": "low"
+                }
+
+                # Generate recommendation based on signal and position status
+                sell_signal = position_analysis["sell_signal"]
+                if sell_signal:
+                    confidence = sell_signal.get("confidence", 0)
+                    if confidence >= 0.8:
+                        if pnl_percent > 10:
+                            position_analysis["recommendation"] = "强烈建议获利了结"
+                            position_analysis["risk_level"] = "low"
+                        elif pnl_percent < -5:
+                            position_analysis["recommendation"] = "建议止损"
+                            position_analysis["risk_level"] = "high"
+                        else:
+                            position_analysis["recommendation"] = "建议卖出"
+                            position_analysis["risk_level"] = "medium"
+                    elif confidence >= 0.6:
+                        position_analysis["recommendation"] = "可考虑减仓"
+                        position_analysis["risk_level"] = "medium"
+                else:
+                    if pnl_percent > 15:
+                        position_analysis["recommendation"] = "继续持有，可考虑部分获利"
+                    elif pnl_percent < -10:
+                        position_analysis["recommendation"] = "关注风险，考虑止损"
+                        position_analysis["risk_level"] = "high"
+                    else:
+                        position_analysis["recommendation"] = "继续持有"
+
+                analysis_results.append(position_analysis)
+
+            except Exception as e:
+                logger.warning(f"Failed to analyze position {symbol}: {e}")
+                # Add basic position info even if analysis fails
+                analysis_results.append({
+                    "symbol": symbol,
+                    "position_info": {
+                        "quantity": qty,
+                        "avg_cost": position.get('avg_price', 0),
+                        "current_price": position.get('avg_price', 0),
+                        "direction": "long" if qty > 0 else "short"
+                    },
+                    "sell_signal": None,
+                    "recommendation": "分析失败",
+                    "error": str(e)
+                })
+
+        # Sort by risk level and PnL
+        def sort_key(item):
+            risk_score = {"high": 3, "medium": 2, "low": 1}.get(item.get("risk_level", "low"), 1)
+            pnl_percent = item.get("position_info", {}).get("pnl_percent", 0)
+            return (-risk_score, -abs(pnl_percent))  # High risk first, then by absolute PnL
+
+        analysis_results.sort(key=sort_key)
+
+        # Generate summary
+        total_positions = len(analysis_results)
+        profitable_positions = len([p for p in analysis_results if p.get("position_info", {}).get("pnl_percent", 0) > 0])
+        high_risk_positions = len([p for p in analysis_results if p.get("risk_level") == "high"])
+        def _conf(p: Dict[str, Any]) -> float:
+            s = p.get("sell_signal")
+            return float(s.get("confidence", 0)) if isinstance(s, dict) else 0.0
+
+        strong_sell_signals = len([p for p in analysis_results if _conf(p) >= 0.8])
+
+        return {
+            "analysis_time": datetime.now().isoformat(),
+            "portfolio_summary": {
+                "total_positions": total_positions,
+                "profitable_positions": profitable_positions,
+                "losing_positions": total_positions - profitable_positions,
+                "high_risk_positions": high_risk_positions,
+                "strong_sell_signals": strong_sell_signals,
+                "total_market_value": sum(p.get("position_info", {}).get("market_value", 0) for p in analysis_results),
+                "total_pnl": sum(p.get("position_info", {}).get("pnl_amount", 0) for p in analysis_results)
+            },
+            "positions_analysis": analysis_results,
+            "recommendations": {
+                "immediate_action": [p for p in analysis_results if p.get("risk_level") == "high"],
+                "profit_taking": [p for p in analysis_results if p.get("position_info", {}).get("pnl_percent", 0) > 10 and _conf(p) >= 0.7],
+                "hold_positions": [p for p in analysis_results if str(p.get("recommendation", "")).startswith("继续持有")]
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Error analyzing portfolio positions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/strategy/{strategy_id}/signals")
 async def get_strategy_signals(strategy_id: str) -> Dict[str, Any]:

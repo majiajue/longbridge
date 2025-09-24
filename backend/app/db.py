@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+from contextlib import contextmanager
+
 import duckdb
 from duckdb import DuckDBPyConnection
 
@@ -82,13 +85,25 @@ CREATE TABLE IF NOT EXISTS positions (
 );
 """
 
+# A single shared connection guarded by a lock to avoid
+# DuckDB "Unique file handle conflict" when opening the same
+# database file concurrently from multiple threads.
+_CONN: DuckDBPyConnection | None = None
+_LOCK = threading.RLock()
 
-def get_connection() -> DuckDBPyConnection:
+
+@contextmanager
+def get_connection():  # -> Iterator[DuckDBPyConnection]
     settings = get_settings()
     settings.ensure_dirs()
-    conn = duckdb.connect(str(settings.duckdb_path))
-    _run_migrations(conn)
-    return conn
+    with _LOCK:
+        global _CONN
+        if _CONN is None:
+            _CONN = duckdb.connect(str(settings.duckdb_path))
+            _run_migrations(_CONN)
+        # Hold the lock for the entire DB operation scope to serialize access
+        # and prevent concurrent writes on a single connection.
+        yield _CONN
 
 
 def _run_migrations(conn: DuckDBPyConnection) -> None:

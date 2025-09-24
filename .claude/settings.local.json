@@ -12,7 +12,15 @@
       "Bash(npm uninstall:*)",
       "Bash(curl:*)",
       "Bash(pkill:*)",
-      "Bash(uvicorn:*)"
+      "Bash(uvicorn:*)",
+      "Bash(chmod:*)",
+      "Bash(timeout 10s npm run dev)",
+      "Bash(find:*)",
+      "Bash(/dev/null)",
+      "Read(//Volumes/SamSung/**)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []

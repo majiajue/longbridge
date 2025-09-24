@@ -13,7 +13,7 @@ from ..models import (
 )
 from ..services import get_cached_candlesticks, sync_history_candlesticks
 from ..streaming import quote_stream_manager
-from ..repositories import fetch_ticks
+from ..repositories import fetch_ticks, fetch_bars_from_ticks
 
 router = APIRouter(prefix="/quotes", tags=["quotes"])
 
@@ -51,7 +51,11 @@ def get_history(
     ),
 ) -> HistoryBarsResponse:
     try:
-        bars_raw = get_cached_candlesticks(symbol, limit)
+        if period.lower() == "min1":
+            # For intraday minute view, aggregate from ticks to avoid mixing with daily OHLC
+            bars_raw = fetch_bars_from_ticks(symbol, limit)
+        else:
+            bars_raw = get_cached_candlesticks(symbol, limit)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

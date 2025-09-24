@@ -64,6 +64,16 @@ A comprehensive automated trading system with intelligent signal analysis for th
 └─────────────┘
 ```
 
+### 关键技术约定（同步自 docs/DECISIONS.md）
+
+- DuckDB 连接：进程内复用单例连接并用互斥锁串行化访问，避免并发打开同一 DB 文件导致的 “Unique file handle conflict”。实现见 `backend/app/db.py`。
+- 实时 K 线：前端“实时K线”采用分钟线流更新。首屏拉取 1000 根 `min1`，随后按 WebSocket 推送以分钟桶增量更新；若无历史 OHLC，则回退由 ticks 聚合的分钟线以避免空白。实现见 `backend/app/routers/quotes.py`、`backend/app/repositories.py` 与 `frontend/src/pages/RealtimeKLine.tsx`。
+- 设置接口稳定性：`/settings/symbols` 由上述 DB 策略修复并发 500。
+- 策略控制中心：`/strategies/positions/all` 合并真实账户持仓，即便策略未建仓也能显示账户现有持仓。
+- 时间戳一致性：图表统一使用数值型 UTC 秒时间戳，避免字符串/数值混用导致图形不更新。
+
+更多细节与后续规划见：`docs/DECISIONS.md`。
+
 ### 后端架构（FastAPI + Longbridge SDK + DuckDB + AI Signals）
 
 | 模块 | 文件 | 功能说明 |

@@ -1,6 +1,7 @@
 """
 Strategy management API endpoints
 """
+import asyncio
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
@@ -8,6 +9,7 @@ import json
 import logging
 
 from ..strategy_engine import get_strategy_engine, StrategyStatus
+from ..services import get_positions as get_broker_positions
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +127,7 @@ async def get_all_positions() -> List[Dict[str, Any]]:
     """Get all positions across all strategies"""
     try:
         engine = get_strategy_engine()
-        positions = []
+        positions: List[Dict[str, Any]] = []
 
         for key, pos in engine.positions.items():
             positions.append({
@@ -140,6 +142,41 @@ async def get_all_positions() -> List[Dict[str, Any]]:
                 'strategy_id': pos.strategy_id,
                 'status': pos.status,
                 'pnl': pos.pnl if pos.pnl else 0
+            })
+
+        # Merge actual broker positions so Strategy Control can display holdings
+        try:
+            broker_positions = get_broker_positions()
+        except Exception as e:
+            logger.warning(f"Failed to load broker positions: {e}")
+            broker_positions = []
+
+        # Build a quick set of symbols already present from strategy positions to avoid duplicates
+        existing_keys = {p.get('id') for p in positions}
+
+        for bp in broker_positions:
+            qty = float(bp.get('qty', 0) or 0)
+            if qty == 0:
+                continue
+            symbol = str(bp.get('symbol', '')).upper()
+            entry_price = float(bp.get('avg_price', 0) or 0)
+            direction = str(bp.get('direction', 'long')).lower()
+            side = 'sell' if direction == 'short' else 'buy'
+            pid = f"portfolio_{symbol}"
+            if pid in existing_keys:
+                continue
+            positions.append({
+                'id': pid,
+                'symbol': symbol,
+                'side': side,
+                'quantity': qty,
+                'entry_price': entry_price,
+                'entry_time': None,
+                'stop_loss': 0.0,
+                'take_profit': 0.0,
+                'strategy_id': 'portfolio',
+                'status': 'open',
+                'pnl': 0.0,
             })
 
         return positions

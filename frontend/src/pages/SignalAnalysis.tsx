@@ -96,6 +96,7 @@ export default function SignalAnalysisPage() {
   const [symbolInput, setSymbolInput] = useState('');
   const [analysis, setAnalysis] = useState<SignalAnalysis | null>(null);
   const [marketOverview, setMarketOverview] = useState<MarketOverview | null>(null);
+  const [portfolioAnalysis, setPortfolioAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [factorsDialog, setFactorsDialog] = useState(false);
@@ -103,7 +104,10 @@ export default function SignalAnalysisPage() {
   // Load market overview on component mount
   useEffect(() => {
     loadMarketOverview();
-  }, []);
+    if (currentTab === 1) {
+      loadPortfolioAnalysis();
+    }
+  }, [currentTab]);
 
   const loadMarketOverview = async () => {
     try {
@@ -120,6 +124,27 @@ export default function SignalAnalysisPage() {
     } catch (e) {
       setError('Failed to connect to backend');
       console.error('Error loading market overview:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadPortfolioAnalysis = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const response = await fetch(`${base}/signals/portfolio/positions`);
+
+      if (response.ok) {
+        const data = await response.json();
+        setPortfolioAnalysis(data);
+      } else {
+        setError('Failed to load portfolio analysis');
+      }
+    } catch (e) {
+      setError('Failed to connect to backend');
+      console.error('Error loading portfolio analysis:', e);
     } finally {
       setLoading(false);
     }
@@ -243,6 +268,7 @@ export default function SignalAnalysisPage() {
 
       <Tabs value={currentTab} onChange={(_, newValue) => setCurrentTab(newValue)} sx={{ mb: 3 }}>
         <Tab label="市场概览" />
+        <Tab label="持仓分析" />
         <Tab label="个股分析" />
         <Tab label="因子说明" />
       </Tabs>
@@ -410,8 +436,216 @@ export default function SignalAnalysisPage() {
         </Box>
       )}
 
-      {/* Individual Analysis Tab */}
+      {/* Portfolio Analysis Tab */}
       {currentTab === 1 && (
+        <Box>
+          {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+          {portfolioAnalysis && (
+            <Grid container spacing={3}>
+              {/* Portfolio Summary */}
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      持仓概览
+                    </Typography>
+                    <Grid container spacing={2}>
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography variant="h4" color="primary">
+                            {portfolioAnalysis.portfolio_summary.total_positions}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            总持仓数
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography variant="h4" color="success.main">
+                            {portfolioAnalysis.portfolio_summary.profitable_positions}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            盈利持仓
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography variant="h4" color="error.main">
+                            {portfolioAnalysis.portfolio_summary.losing_positions}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            亏损持仓
+                          </Typography>
+                        </Box>
+                      </Grid>
+                      <Grid item xs={6} md={3}>
+                        <Box textAlign="center">
+                          <Typography variant="h4" color="warning.main">
+                            {portfolioAnalysis.portfolio_summary.high_risk_positions}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            高风险持仓
+                          </Typography>
+                        </Box>
+                      </Grid>
+                    </Grid>
+
+                    <Box mt={3}>
+                      <Typography variant="subtitle1" gutterBottom>
+                        总盈亏: <span style={{ color: portfolioAnalysis.portfolio_summary.total_pnl >= 0 ? '#4caf50' : '#f44336' }}>
+                          ${portfolioAnalysis.portfolio_summary.total_pnl?.toFixed(2) || '0.00'}
+                        </span>
+                      </Typography>
+                      <Typography variant="subtitle1">
+                        总市值: ${portfolioAnalysis.portfolio_summary.total_market_value?.toFixed(2) || '0.00'}
+                      </Typography>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Position Analysis List */}
+              <Grid item xs={12}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                      持仓分析建议
+                    </Typography>
+                    <TableContainer>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>股票</TableCell>
+                            <TableCell align="right">数量</TableCell>
+                            <TableCell align="right">成本</TableCell>
+                            <TableCell align="right">现价</TableCell>
+                            <TableCell align="right">盈亏</TableCell>
+                            <TableCell align="right">信号置信度</TableCell>
+                            <TableCell>建议</TableCell>
+                            <TableCell>风险等级</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {portfolioAnalysis.positions_analysis.map((position: any, index: number) => (
+                            <TableRow key={index}>
+                              <TableCell>
+                                <Typography fontWeight="medium">{position.symbol}</Typography>
+                                <Typography variant="caption" color="text.secondary">
+                                  {position.symbol_name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                {position.position_info.quantity}
+                              </TableCell>
+                              <TableCell align="right">
+                                ${position.position_info.avg_cost?.toFixed(2)}
+                              </TableCell>
+                              <TableCell align="right">
+                                ${position.position_info.current_price?.toFixed(2)}
+                              </TableCell>
+                              <TableCell align="right">
+                                <Typography
+                                  color={position.position_info.pnl_percent >= 0 ? 'success.main' : 'error.main'}
+                                  fontWeight="medium"
+                                >
+                                  {position.position_info.pnl_percent?.toFixed(2)}%
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right">
+                                {position.sell_signal && (
+                                  <Chip
+                                    label={`${(position.sell_signal.confidence * 100).toFixed(0)}%`}
+                                    color={getConfidenceColor(position.sell_signal.confidence)}
+                                    size="small"
+                                  />
+                                )}
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2">
+                                  {position.recommendation}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={position.risk_level}
+                                  color={position.risk_level === 'high' ? 'error' : position.risk_level === 'medium' ? 'warning' : 'success'}
+                                  size="small"
+                                  variant={position.risk_level === 'high' ? 'filled' : 'outlined'}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Quick Actions */}
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom color="error.main">
+                      需要立即关注
+                    </Typography>
+                    {portfolioAnalysis.recommendations.immediate_action.length > 0 ? (
+                      portfolioAnalysis.recommendations.immediate_action.map((position: any, index: number) => (
+                        <Alert severity="error" key={index} sx={{ mb: 1 }}>
+                          <Typography fontWeight="medium">{position.symbol}</Typography>
+                          <Typography variant="body2">{position.recommendation}</Typography>
+                        </Alert>
+                      ))
+                    ) : (
+                      <Typography color="text.secondary">暂无需要立即处理的持仓</Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Card>
+                  <CardContent>
+                    <Typography variant="h6" gutterBottom color="success.main">
+                      获利了结机会
+                    </Typography>
+                    {portfolioAnalysis.recommendations.profit_taking.length > 0 ? (
+                      portfolioAnalysis.recommendations.profit_taking.map((position: any, index: number) => (
+                        <Alert severity="success" key={index} sx={{ mb: 1 }}>
+                          <Typography fontWeight="medium">{position.symbol}</Typography>
+                          <Typography variant="body2">
+                            盈利 {position.position_info.pnl_percent?.toFixed(2)}% - {position.recommendation}
+                          </Typography>
+                        </Alert>
+                      ))
+                    ) : (
+                      <Typography color="text.secondary">暂无明显获利了结机会</Typography>
+                    )}
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+          )}
+
+          {portfolioAnalysis?.message && (
+            <Alert severity="info" sx={{ mt: 2 }}>
+              {portfolioAnalysis.message}
+            </Alert>
+          )}
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              {error}
+            </Alert>
+          )}
+        </Box>
+      )}
+
+      {/* Individual Analysis Tab */}
+      {currentTab === 2 && (
         <Box>
           {/* Search Box */}
           <Card sx={{ mb: 3 }}>
@@ -576,7 +810,7 @@ export default function SignalAnalysisPage() {
       )}
 
       {/* Factors Explanation Tab */}
-      {currentTab === 2 && (
+      {currentTab === 3 && (
         <Box>
           <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
