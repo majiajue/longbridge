@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional, Set
 from .exceptions import LongbridgeDependencyMissing
 from .repositories import load_credentials, load_symbols, store_tick_event
 from .services import get_portfolio_overview
-from .strategy_engine import get_strategy_engine
+from .strategy_engine import get_strategy_engine, MarketData
 from .position_monitor import get_position_monitor
 
 logger = logging.getLogger(__name__)
@@ -211,7 +211,7 @@ class QuoteStreamManager:
                 continue
 
             try:
-                from longport.openapi import Config, QuoteContext, SubType
+                from longport.openapi import Config, QuoteContext, SubType, Period
             except ModuleNotFoundError as exc:
                 self._update_status("error", "未找到 longport SDK，请安装后重试")
                 logger.exception("Missing longport SDK", exc_info=exc)
@@ -250,14 +250,50 @@ class QuoteStreamManager:
                 except Exception as exc:  # pragma: no cover - defensive
                     logger.exception("处理行情推送失败", exc_info=exc)
 
+            def on_candlestick(symbol: str, event: Any) -> None:
+                """Handle K-line data for strategy processing"""
+                try:
+                    # Convert K-line data to strategy format
+                    bar = {
+                        'open': float(getattr(event, 'open', 0)),
+                        'high': float(getattr(event, 'high', 0)),
+                        'low': float(getattr(event, 'low', 0)),
+                        'close': float(getattr(event, 'close', 0)),
+                        'volume': float(getattr(event, 'volume', 0)),
+                        'timestamp': getattr(event, 'timestamp', 0)
+                    }
+
+                    # Process K-line data in strategy engine
+                    engine = get_strategy_engine()
+                    asyncio.run_coroutine_threadsafe(
+                        engine.process_kline(symbol, bar),
+                        self._loop
+                    )
+
+                    # Broadcast K-line data to WebSocket clients
+                    payload = {
+                        'type': 'candlestick',
+                        'symbol': symbol,
+                        'data': bar,
+                        'timestamp': datetime.now(timezone.utc).isoformat()
+                    }
+                    self._broadcast(payload)
+
+                    logger.debug(f"Processed K-line for {symbol}: {bar['close']}")
+
+                except Exception as exc:
+                    logger.exception(f"处理K线推送失败 {symbol}", exc_info=exc)
+
             ctx.set_on_quote(on_quote)
+            ctx.set_on_candlestick(on_candlestick)
 
             try:
+                # Subscribe to quotes only (K-line data not available in current API)
                 ctx.subscribe(symbols, [SubType.Quote], is_first_push=True)
                 current_symbols = set(symbols)
                 with self._lock:
                     self._current_symbols = set(current_symbols)
-                self._update_status("running", f"已订阅 {len(current_symbols)} 只股票")
+                self._update_status("running", f"已订阅 {len(current_symbols)} 只股票（实时行情）")
             except Exception as exc:
                 self._update_status("error", f"订阅失败: {exc}")
                 logger.exception("Subscribe failed", exc_info=exc)

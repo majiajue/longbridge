@@ -13,6 +13,8 @@ from .routers import quotes as quotes_router
 from .routers import settings as settings_router
 from .routers import strategies as strategies_router
 from .routers import monitoring as monitoring_router
+from .routers import notifications as notifications_router
+from .routers import signal_analysis as signal_analysis_router
 from .streaming import quote_stream_manager
 from .position_monitor import get_position_monitor
 
@@ -34,6 +36,8 @@ app.include_router(quotes_router.router)
 app.include_router(portfolio_router.router)
 app.include_router(strategies_router.router)
 app.include_router(monitoring_router.router)
+app.include_router(notifications_router.router)
+app.include_router(signal_analysis_router.router)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

@@ -4,8 +4,9 @@
       "id": "ma_crossover",
       "name": "均线交叉策略",
       "enabled": true,
-      "description": "基于短期和长期移动平均线交叉的趋势跟踪策略",
+      "description": "基于短期和长期移动平均线交叉的趋势跟踪策略，集成AI智能信号分析",
       "symbols": ["700.HK", "AAPL.US"],
+      "use_optimal_signals": true,
       "conditions": {
         "buy": [
           {
@@ -40,15 +41,17 @@
         "stop_loss": 0.05,
         "take_profit": 0.15,
         "position_size": 0.1,
-        "max_positions": 3
+        "max_positions": 3,
+        "trailing_stop": 0.03
       }
     },
     {
       "id": "rsi_oversold",
       "name": "RSI超卖反弹策略",
       "enabled": false,
-      "description": "在RSI超卖时买入，超买时卖出的反转策略",
+      "description": "在RSI超卖时买入，超买时卖出的反转策略，集成智能信号分析",
       "symbols": ["0005.HK", "TSLA.US"],
+      "use_optimal_signals": true,
       "conditions": {
         "buy": [
           {
@@ -89,8 +92,9 @@
       "id": "breakout",
       "name": "突破策略",
       "enabled": false,
-      "description": "价格突破关键阻力位时买入的动量策略",
+      "description": "价格突破关键阻力位时买入的动量策略，集成多因子智能分析",
       "symbols": ["9988.HK", "NVDA.US"],
+      "use_optimal_signals": true,
       "conditions": {
         "buy": [
           {
@@ -133,8 +137,9 @@
       "id": "bollinger_bands",
       "name": "布林带策略",
       "enabled": false,
-      "description": "基于布林带的均值回归策略",
+      "description": "基于布林带的均值回归策略，集成市场情绪分析",
       "symbols": ["MSFT.US", "GOOGL.US"],
+      "use_optimal_signals": true,
       "conditions": {
         "buy": [
           {
@@ -170,8 +175,9 @@
       "id": "macd_divergence",
       "name": "MACD背离策略",
       "enabled": false,
-      "description": "MACD指标背离信号的趋势反转策略",
+      "description": "MACD指标背离信号的趋势反转策略，集成动量分析优化",
       "symbols": ["700.HK", "AAPL.US"],
+      "use_optimal_signals": true,
       "conditions": {
         "buy": [
           {
@@ -231,7 +237,12 @@
       "order_placed",
       "order_filled",
       "stop_loss_triggered",
-      "take_profit_triggered"
+      "take_profit_triggered",
+      "optimal_signal_triggered",
+      "optimal_order_placed",
+      "optimal_order_submitted",
+      "optimal_exit_signal",
+      "optimal_order_rejected"
     ]
   }
 }

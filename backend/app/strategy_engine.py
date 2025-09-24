@@ -39,6 +39,11 @@ class Position:
     exit_price: Optional[float] = None
     exit_time: Optional[datetime] = None
     pnl: Optional[float] = None
+    order_id: Optional[str] = None  # Real order ID from Longbridge
+    exit_order_id: Optional[str] = None  # Exit order ID
+    actual_entry_price: Optional[float] = None  # Actual filled entry price
+    actual_exit_price: Optional[float] = None  # Actual filled exit price
+    is_simulation: bool = False  # Whether this is a simulation position
 
 @dataclass
 class MarketData:
@@ -231,15 +236,139 @@ class StrategyEngine:
             existing_position = self.positions.get(position_key)
 
             if existing_position and existing_position.status == "open":
-                # Check exit conditions (stop loss, take profit, sell signal)
-                await self.check_exit_conditions(existing_position, market_data, strategy)
+                # Use optimal signal analysis for exit conditions
+                await self.check_optimal_exit_conditions(existing_position, buffer, market_data, strategy)
             else:
-                # Check entry conditions
-                if self.evaluate_conditions(strategy['conditions']['buy'], buffer, market_data):
-                    await self.execute_buy(strategy_id, strategy, symbol, market_data)
+                # Use enhanced signal analysis for entry
+                if strategy.get('use_optimal_signals', True):  # 默认启用最优信号分析
+                    await self.evaluate_optimal_entry(strategy_id, strategy, symbol, buffer, market_data)
+                else:
+                    # Fallback to traditional condition evaluation
+                    if self.evaluate_conditions(strategy['conditions']['buy'], buffer, market_data):
+                        await self.execute_buy(strategy_id, strategy, symbol, market_data)
 
         except Exception as e:
             logger.error(f"Error evaluating strategy {strategy_id} for {symbol}: {e}")
+
+    async def evaluate_optimal_entry(
+        self,
+        strategy_id: str,
+        strategy: Dict,
+        symbol: str,
+        buffer: KLineBuffer,
+        market_data: MarketData
+    ):
+        """使用最优信号分析评估入场时机"""
+        try:
+            from .optimal_trading_signals import get_optimal_signals
+
+            optimal_analyzer = get_optimal_signals()
+
+            # 分析最佳入场点
+            signal = optimal_analyzer.analyze_optimal_entry(symbol, buffer, market_data, strategy)
+
+            if signal and signal.confidence >= 0.6:  # 高置信度才执行交易
+                logger.info(f"Optimal buy signal detected for {symbol}: confidence={signal.confidence:.2f}, factors={signal.factors}")
+
+                # 使用优化的参数执行买入
+                await self.execute_optimal_buy(strategy_id, strategy, symbol, market_data, signal)
+
+                # 发送增强的通知
+                await self.send_notification({
+                    'type': 'optimal_signal_triggered',
+                    'strategy_id': strategy_id,
+                    'strategy_name': strategy.get('name', ''),
+                    'symbol': symbol,
+                    'signal_type': 'buy',
+                    'confidence': signal.confidence,
+                    'strength': signal.strength.name,
+                    'factors': signal.factors,
+                    'reason': signal.reason,
+                    'recommended_stop_loss': signal.stop_loss,
+                    'recommended_take_profit': signal.take_profit,
+                    'recommended_position_size': signal.position_size,
+                    'timestamp': signal.timestamp.isoformat()
+                })
+
+        except Exception as e:
+            logger.error(f"Error in optimal entry evaluation: {e}")
+
+    async def check_optimal_exit_conditions(
+        self,
+        position: Position,
+        buffer: KLineBuffer,
+        market_data: MarketData,
+        strategy: Dict
+    ):
+        """使用最优信号分析检查出场条件"""
+        try:
+            from .optimal_trading_signals import get_optimal_signals
+
+            optimal_analyzer = get_optimal_signals()
+
+            # 检查最优出场时机
+            signal = optimal_analyzer.analyze_optimal_exit(
+                position.symbol,
+                buffer,
+                market_data,
+                position.entry_price,
+                position.entry_time,
+                strategy
+            )
+
+            if signal and signal.confidence >= 0.7:  # 出场需要更高置信度
+                logger.info(f"Optimal sell signal detected for {position.symbol}: confidence={signal.confidence:.2f}")
+
+                await self.execute_sell(position, market_data.close, f"optimal_signal: {signal.reason}")
+
+                # 发送增强的出场通知
+                await self.send_notification({
+                    'type': 'optimal_exit_signal',
+                    'strategy_id': position.strategy_id,
+                    'symbol': position.symbol,
+                    'confidence': signal.confidence,
+                    'strength': signal.strength.name,
+                    'factors': signal.factors,
+                    'reason': signal.reason,
+                    'timestamp': signal.timestamp.isoformat()
+                })
+            else:
+                # 如果没有最优出场信号，使用传统的止损止盈检查
+                await self.check_traditional_exit_conditions(position, market_data, strategy)
+
+        except Exception as e:
+            logger.error(f"Error in optimal exit evaluation: {e}")
+            # Fallback to traditional exit check
+            await self.check_traditional_exit_conditions(position, market_data, strategy)
+
+    async def check_traditional_exit_conditions(self, position: Position, market_data: MarketData, strategy: Dict):
+        """传统的出场条件检查（原有逻辑）"""
+        current_price = market_data.close
+
+        # Check stop loss
+        if current_price <= position.stop_loss:
+            await self.execute_sell(position, current_price, "stop_loss")
+            return
+
+        # Check take profit
+        if current_price >= position.take_profit:
+            await self.execute_sell(position, current_price, "take_profit")
+            return
+
+        # Check trailing stop if configured
+        risk_mgmt = strategy.get('risk_management', {})
+        trailing_stop = risk_mgmt.get('trailing_stop')
+        if trailing_stop:
+            # Update stop loss if price has moved favorably
+            new_stop_loss = current_price * (1 - trailing_stop)
+            if new_stop_loss > position.stop_loss:
+                position.stop_loss = new_stop_loss
+                logger.info(f"Updated trailing stop for {position.symbol}: {new_stop_loss}")
+
+        # Check sell signal conditions
+        buffer = self.kline_buffers.get(position.symbol)
+        if buffer and self.evaluate_conditions(strategy['conditions']['sell'], buffer, market_data):
+            await self.execute_sell(position, current_price, "signal")
 
     def evaluate_conditions(self, conditions: List[Dict], buffer: KLineBuffer, market_data: MarketData) -> bool:
         """Evaluate a list of conditions"""
@@ -492,7 +621,141 @@ class StrategyEngine:
 
             logger.info(f"Buy order placed: {symbol} @ {entry_price}, SL: {stop_loss}, TP: {take_profit}")
 
-            # TODO: Integrate with Longbridge API to place actual order
+        except Exception as e:
+            logger.error(f"Error executing buy order: {e}")
+
+    async def execute_optimal_buy(self, strategy_id: str, strategy: Dict, symbol: str, market_data: MarketData, signal):
+        """Execute buy order with optimal signal parameters"""
+        try:
+            # Check risk management rules
+            risk_mgmt = strategy.get('risk_management', {})
+
+            # Check max positions
+            strategy_positions = [p for p in self.positions.values()
+                                 if p.strategy_id == strategy_id and p.status == 'open']
+            if len(strategy_positions) >= risk_mgmt.get('max_positions', 3):
+                logger.info(f"Max positions reached for strategy {strategy_id}")
+                return
+
+            # Check daily trade limit
+            if self.daily_trade_count >= self.global_settings.get('max_daily_trades', 10):
+                logger.info("Daily trade limit reached")
+                return
+
+            # Use optimal signal's recommended position size
+            if signal.position_size:
+                position_size_ratio = signal.position_size
+                quantity = max(1, int(10000 * position_size_ratio / market_data.close))  # 简化的仓位计算
+            else:
+                # Fallback to traditional calculation
+                position_size = risk_mgmt.get('position_size', 0.1)
+                quantity = 100
+
+            # Use optimal signal's recommended stops
+            entry_price = market_data.close
+            stop_loss = signal.stop_loss if signal.stop_loss else entry_price * (1 - risk_mgmt.get('stop_loss', 0.05))
+            take_profit = signal.take_profit if signal.take_profit else entry_price * (1 + risk_mgmt.get('take_profit', 0.15))
+
+            # Create enhanced position with signal information
+            position = Position(
+                symbol=symbol,
+                side=OrderSide.BUY,
+                quantity=quantity,
+                entry_price=entry_price,
+                entry_time=datetime.now(),
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                strategy_id=strategy_id
+            )
+
+            # Add optimal signal metadata to position
+            position.signal_confidence = signal.confidence
+            position.signal_strength = signal.strength.name
+            position.signal_factors = signal.factors
+            position.signal_reason = signal.reason
+
+            # Store position
+            position_key = f"{strategy_id}_{symbol}"
+            self.positions[position_key] = position
+
+            # Update counters
+            self.daily_trade_count += 1
+            self.last_trade_time[strategy_id] = datetime.now()
+            self.strategy_status[strategy_id] = StrategyStatus.EXECUTING
+
+            # Send enhanced notification
+            await self.send_notification({
+                'type': 'optimal_order_placed',
+                'strategy_id': strategy_id,
+                'strategy_name': strategy.get('name', ''),
+                'symbol': symbol,
+                'side': 'BUY',
+                'quantity': quantity,
+                'price': entry_price,
+                'stop_loss': stop_loss,
+                'take_profit': take_profit,
+                'confidence': signal.confidence,
+                'signal_strength': signal.strength.name,
+                'signal_reason': signal.reason,
+                'position_size_ratio': position_size_ratio if signal.position_size else None,
+                'timestamp': datetime.now().isoformat()
+            })
+
+            logger.info(f"Optimal buy order placed: {symbol} @ {entry_price}, confidence={signal.confidence:.2f}, SL: {stop_loss}, TP: {take_profit}")
+
+            # Integrate with Longbridge API to place actual order
+            try:
+                from .trading_api import get_trading_api, OrderRequest, OrderSide, OrderType
+
+                trading_api = get_trading_api()
+                order_request = OrderRequest(
+                    symbol=symbol,
+                    side=OrderSide.BUY,
+                    quantity=quantity,
+                    order_type=OrderType.MARKET,
+                    remark=f"Optimal Strategy: {strategy.get('name', strategy_id)} - Confidence: {signal.confidence:.2f}"
+                )
+
+                order_response = await trading_api.place_order(order_request)
+
+                if order_response.status.value in ["submitted", "filled", "partial_filled"]:
+                    # Update position with real order ID
+                    position.order_id = order_response.order_id
+                    position.actual_entry_price = order_response.filled_price or entry_price
+                    logger.info(f"Real optimal order placed successfully: {order_response.order_id}")
+
+                    # Send success notification
+                    await self.send_notification({
+                        'type': 'optimal_order_submitted',
+                        'strategy_id': strategy_id,
+                        'order_id': order_response.order_id,
+                        'symbol': symbol,
+                        'side': 'BUY',
+                        'quantity': quantity,
+                        'price': entry_price,
+                        'confidence': signal.confidence,
+                        'status': order_response.status.value,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                else:
+                    # Order failed, remove position
+                    position_key = f"{strategy_id}_{symbol}"
+                    if position_key in self.positions:
+                        del self.positions[position_key]
+
+                    logger.error(f"Optimal order rejected: {order_response.error_message}")
+                    await self.send_notification({
+                        'type': 'optimal_order_rejected',
+                        'strategy_id': strategy_id,
+                        'symbol': symbol,
+                        'error': order_response.error_message,
+                        'timestamp': datetime.now().isoformat()
+                    })
+
+            except Exception as api_error:
+                logger.error(f"Failed to place real optimal order: {api_error}")
+                # Keep simulated position but mark it as simulation
+                position.is_simulation = True
 
         except Exception as e:
             logger.error(f"Error executing buy order: {e}")
@@ -562,7 +825,59 @@ class StrategyEngine:
             # Update strategy status
             self.strategy_status[position.strategy_id] = StrategyStatus.COOLDOWN
 
-            # TODO: Integrate with Longbridge API to place actual sell order
+            # Integrate with Longbridge API to place actual sell order
+            try:
+                from .trading_api import get_trading_api, OrderRequest, OrderSide, OrderType
+
+                trading_api = get_trading_api()
+                order_request = OrderRequest(
+                    symbol=position.symbol,
+                    side=OrderSide.SELL,
+                    quantity=position.quantity,
+                    order_type=OrderType.MARKET,
+                    remark=f"Exit: {reason} - Strategy: {position.strategy_id}"
+                )
+
+                order_response = await trading_api.place_order(order_request)
+
+                if order_response.status.value in ["submitted", "filled", "partial_filled"]:
+                    position.exit_order_id = order_response.order_id
+                    position.actual_exit_price = order_response.filled_price or price
+                    logger.info(f"Real sell order placed successfully: {order_response.order_id}")
+
+                    # Recalculate PnL with actual prices
+                    if position.actual_entry_price and position.actual_exit_price:
+                        actual_pnl = (position.actual_exit_price - position.actual_entry_price) * position.quantity
+                        position.pnl = actual_pnl
+                        logger.info(f"Actual PnL: {actual_pnl:.2f}")
+
+                    await self.send_notification({
+                        'type': 'sell_order_submitted',
+                        'strategy_id': position.strategy_id,
+                        'order_id': order_response.order_id,
+                        'symbol': position.symbol,
+                        'side': 'SELL',
+                        'quantity': position.quantity,
+                        'price': price,
+                        'actual_price': order_response.filled_price,
+                        'pnl': position.pnl,
+                        'reason': reason,
+                        'timestamp': datetime.now().isoformat()
+                    })
+                else:
+                    logger.error(f"Sell order rejected: {order_response.error_message}")
+                    await self.send_notification({
+                        'type': 'sell_order_rejected',
+                        'strategy_id': position.strategy_id,
+                        'symbol': position.symbol,
+                        'error': order_response.error_message,
+                        'reason': reason,
+                        'timestamp': datetime.now().isoformat()
+                    })
+
+            except Exception as api_error:
+                logger.error(f"Failed to place real sell order: {api_error}")
+                position.is_simulation = True
 
         except Exception as e:
             logger.error(f"Error executing sell order: {e}")
@@ -597,8 +912,67 @@ class StrategyEngine:
         if 'log' in self.notification_settings.get('channels', []):
             logger.info(f"Strategy Notification: {json.dumps(message, ensure_ascii=False)}")
 
-        # TODO: Send through WebSocket to frontend
-        # TODO: Send email/SMS notifications if configured
+        # Send through notification manager
+        try:
+            from .notification_manager import get_notification_manager, NotificationType
+
+            notif_manager = get_notification_manager()
+
+            # Map event types to notification types
+            notification_type = {
+                'order_placed': NotificationType.TRADE_SIGNAL,
+                'order_submitted': NotificationType.ORDER_UPDATE,
+                'order_filled': NotificationType.SUCCESS,
+                'order_rejected': NotificationType.ERROR,
+                'sell_order_submitted': NotificationType.ORDER_UPDATE,
+                'sell_order_rejected': NotificationType.ERROR,
+                'strategy_triggered': NotificationType.STRATEGY_UPDATE,
+                'stop_loss_triggered': NotificationType.WARNING,
+                'take_profit_triggered': NotificationType.SUCCESS,
+            }.get(event_type, NotificationType.INFO)
+
+            # Create appropriate notification based on event type
+            if event_type in ['order_submitted', 'sell_order_submitted']:
+                await notif_manager.send_order_update(
+                    order_id=message.get('order_id', ''),
+                    symbol=message.get('symbol', ''),
+                    status=message.get('status', 'submitted'),
+                    side=message.get('side', ''),
+                    quantity=message.get('quantity', 0),
+                    price=message.get('price', 0.0),
+                    additional_data=message
+                )
+            elif event_type in ['order_placed', 'strategy_triggered']:
+                await notif_manager.send_trading_signal(
+                    strategy_id=message.get('strategy_id', ''),
+                    symbol=message.get('symbol', ''),
+                    signal_type=message.get('side', ''),
+                    price=message.get('price', 0.0),
+                    additional_data=message
+                )
+            elif event_type in ['order_rejected', 'sell_order_rejected']:
+                await notif_manager.send_error(
+                    title=f"订单失败 - {message.get('symbol', '')}",
+                    error=message.get('error', '订单被拒绝'),
+                    additional_data=message
+                )
+            else:
+                # Generic notification
+                title = {
+                    'order_filled': f"交易完成 - {message.get('symbol', '')}",
+                    'stop_loss_triggered': f"止损触发 - {message.get('symbol', '')}",
+                    'take_profit_triggered': f"止盈触发 - {message.get('symbol', '')}",
+                }.get(event_type, f"策略事件 - {message.get('strategy_id', '')}")
+
+                await notif_manager.send_notification(
+                    notification_type=notification_type,
+                    title=title,
+                    message=json.dumps(message, ensure_ascii=False, indent=2),
+                    data=message
+                )
+
+        except Exception as e:
+            logger.error(f"Failed to send notification: {e}")
 
     def get_status(self) -> Dict:
         """Get current status of all strategies and positions"""

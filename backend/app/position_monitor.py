@@ -104,12 +104,12 @@ class PositionMonitor:
                 # Create monitored position
                 monitored_pos = MonitoredPosition(
                     symbol=symbol,
-                    quantity=position['quantity'],
-                    avg_cost=position['avg_cost'],
-                    current_price=position['current_price'],
-                    market_value=position['market_value'],
-                    pnl=position['pnl'],
-                    pnl_ratio=position['pnl_ratio'],
+                    quantity=position.get('qty', position.get('quantity', 0)),
+                    avg_cost=position.get('avg_price', position.get('avg_cost', 0)),
+                    current_price=position.get('current_price', 0),
+                    market_value=position.get('market_value', 0),
+                    pnl=position.get('pnl', 0),
+                    pnl_ratio=position.get('pnl_ratio', 0),
                     monitoring_config=config,
                     last_check=datetime.now()
                 )
@@ -135,8 +135,10 @@ class PositionMonitor:
                 if buffer and buffer.data:
                     latest = buffer.data[-1]
                     position['current_price'] = latest.close
-                    position['pnl'] = (latest.close - position['avg_cost']) * position['quantity']
-                    position['pnl_ratio'] = (latest.close - position['avg_cost']) / position['avg_cost']
+                    avg_cost = position.get('avg_price', position.get('avg_cost', 0))
+                    quantity = position.get('qty', position.get('quantity', 0))
+                    position['pnl'] = (latest.close - avg_cost) * quantity
+                    position['pnl_ratio'] = (latest.close - avg_cost) / avg_cost if avg_cost != 0 else 0
 
             return positions
 
@@ -212,12 +214,12 @@ class PositionMonitor:
 
                         monitored_pos = MonitoredPosition(
                             symbol=symbol,
-                            quantity=pos['quantity'],
-                            avg_cost=pos['avg_cost'],
-                            current_price=pos['current_price'],
-                            market_value=pos['market_value'],
-                            pnl=pos['pnl'],
-                            pnl_ratio=pos['pnl_ratio'],
+                            quantity=pos.get('qty', pos.get('quantity', 0)),
+                            avg_cost=pos.get('avg_price', pos.get('avg_cost', 0)),
+                            current_price=pos.get('current_price', 0),
+                            market_value=pos.get('market_value', 0),
+                            pnl=pos.get('pnl', 0),
+                            pnl_ratio=pos.get('pnl_ratio', 0),
                             monitoring_config=config,
                             last_check=datetime.now()
                         )
@@ -580,9 +582,9 @@ class PositionMonitor:
                 symbol = pos['symbol']
                 if symbol in self.monitored_positions:
                     monitored = self.monitored_positions[symbol]
-                    monitored.quantity = pos['quantity']
-                    monitored.avg_cost = pos['avg_cost']
-                    monitored.market_value = pos['market_value']
+                    monitored.quantity = pos.get('qty', pos.get('quantity', 0))
+                    monitored.avg_cost = pos.get('avg_price', pos.get('avg_cost', 0))
+                    monitored.market_value = pos.get('market_value', 0)
 
     async def stop_monitoring(self):
         """Stop monitoring loop"""
