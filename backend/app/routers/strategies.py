@@ -2,6 +2,7 @@
 Strategy management API endpoints
 """
 import asyncio
+from datetime import datetime, timedelta
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
@@ -28,6 +29,15 @@ class StrategyResponse(BaseModel):
     symbols: List[str]
     status: str
     last_trade: Optional[str] = None
+
+class TradingSignalResponse(BaseModel):
+    time: int
+    price: float
+    type: str  # 'buy' or 'sell'
+    strategy: str
+    confidence: float
+    reason: Optional[str] = None
+    symbol: str
 
 @router.get("/")
 async def get_strategies() -> List[StrategyResponse]:
@@ -249,6 +259,105 @@ async def get_strategy(strategy_id: str) -> Dict[str, Any]:
         raise
     except Exception as e:
         logger.error(f"Error getting strategy {strategy_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/signals")
+async def get_trading_signals(symbol: Optional[str] = None, limit: int = 100) -> Dict[str, Any]:
+    """Get trading signals for analysis and chart display"""
+    try:
+        engine = get_strategy_engine()
+        signals = []
+
+        # Generate mock signals based on strategy positions (in a real system, these would be stored)
+        for key, position in engine.positions.items():
+            if symbol and position.symbol.upper() != symbol.upper():
+                continue
+
+            # Add entry signal
+            entry_time = int(position.entry_time.timestamp())
+            signals.append(TradingSignalResponse(
+                time=entry_time,
+                price=position.entry_price,
+                type='buy',
+                strategy=position.strategy_id,
+                confidence=getattr(position, 'signal_confidence', 0.8),
+                reason=getattr(position, 'signal_reason', 'Strategy signal'),
+                symbol=position.symbol
+            ))
+
+            # Add exit signal if position is closed
+            if position.status == 'closed' and position.exit_time and position.exit_price:
+                exit_time = int(position.exit_time.timestamp())
+                signals.append(TradingSignalResponse(
+                    time=exit_time,
+                    price=position.exit_price,
+                    type='sell',
+                    strategy=position.strategy_id,
+                    confidence=0.9,
+                    reason='Exit signal',
+                    symbol=position.symbol
+                ))
+
+        # Sort by time and limit
+        signals.sort(key=lambda x: x.time, reverse=True)
+        signals = signals[:limit]
+
+        return {
+            "signals": [signal.dict() for signal in signals],
+            "count": len(signals)
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting trading signals: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/signals/simulate")
+async def simulate_trading_signals(symbol: str, days: int = 7) -> Dict[str, Any]:
+    """Simulate trading signals for testing chart display"""
+    try:
+        import random
+
+        # Generate mock signals for the past N days
+        signals = []
+        end_time = datetime.now()
+        start_time = end_time - timedelta(days=days)
+
+        # Generate 5-15 random signals within the time period
+        num_signals = random.randint(5, 15)
+
+        for i in range(num_signals):
+            # Random time within the period
+            random_time = start_time + timedelta(
+                seconds=random.randint(0, int((end_time - start_time).total_seconds()))
+            )
+
+            # Mock price (you would get this from actual market data)
+            base_price = 100.0 + random.uniform(-20, 20)
+
+            signal_type = 'buy' if i % 2 == 0 else 'sell'
+            strategy_names = ['ma_crossover', 'rsi_oversold', 'breakout']
+
+            signals.append(TradingSignalResponse(
+                time=int(random_time.timestamp()),
+                price=base_price,
+                type=signal_type,
+                strategy=random.choice(strategy_names),
+                confidence=random.uniform(0.6, 0.95),
+                reason=f"Simulated {signal_type} signal",
+                symbol=symbol.upper()
+            ))
+
+        # Sort by time
+        signals.sort(key=lambda x: x.time)
+
+        return {
+            "signals": [signal.dict() for signal in signals],
+            "count": len(signals),
+            "message": f"Generated {len(signals)} mock signals for {symbol}"
+        }
+
+    except Exception as e:
+        logger.error(f"Error simulating trading signals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/reload")

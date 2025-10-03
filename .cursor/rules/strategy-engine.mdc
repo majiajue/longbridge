@@ -1,0 +1,248 @@
+---
+description: 策略引擎与自动交易（StrategyEngine、技术指标、信号评估）
+---
+# 策略引擎规范
+
+## 核心架构
+
+### StrategyEngine
+- 位置：[backend/app/strategy_engine.py](mdc:backend/app/strategy_engine.py)
+- 全局单例：通过 `get_strategy_engine()` 获取
+- 配置文件：`config/strategies.json`
+- 职责：
+  - 加载与管理交易策略配置
+  - 维护 K 线数据缓冲区（每个符号 200 条）
+  - 评估技术指标与交易条件
+  - 执行买入/卖出决策
+  - 管理持仓与风险控制
+
+## 策略配置
+
+### 配置文件结构（strategies.json）
+```json
+{
+  "strategies": [
+    {
+      "id": "strategy_1",
+      "name": "趋势跟踪策略",
+      "enabled": true,
+      "symbols": ["AAPL.US", "TSLA.US"],
+      "use_optimal_signals": true,
+      "conditions": {
+        "buy": [
+          {
+            "type": "ma_crossover",
+            "params": {
+              "short_period": 5,
+              "long_period": 20,
+              "direction": "golden_cross"
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "ma_crossover",
+            "params": {
+              "short_period": 5,
+              "long_period": 20,
+              "direction": "death_cross"
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.05,
+        "take_profit": 0.15,
+        "trailing_stop": 0.03,
+        "position_size": 0.1,
+        "max_positions": 3
+      }
+    }
+  ],
+  "global_settings": {
+    "max_total_positions": 5,
+    "max_daily_trades": 10,
+    "max_risk_per_trade": 0.02,
+    "cooldown_period": 300
+  },
+  "notification_settings": {
+    "enabled": true,
+    "channels": ["log", "websocket"],
+    "events": [
+      "order_placed",
+      "order_filled",
+      "order_rejected",
+      "strategy_triggered"
+    ]
+  }
+}
+```
+
+## 技术指标
+
+### 支持的指标类型
+- **SMA/EMA**：简单/指数移动平均线
+- **RSI**：相对强弱指标
+- **Bollinger Bands**：布林带
+- **MACD**：异同移动平均线
+- **Volume**：成交量分析
+- **Price Breakout**：价格突破
+
+### 条件类型（condition.type）
+1. **ma_crossover**：均线交叉
+   - `short_period`/`long_period`：短期/长期周期
+   - `direction`：`golden_cross`（金叉）或 `death_cross`（死叉）
+
+2. **rsi**：RSI 指标
+   - `period`：计算周期（默认 14）
+   - `operator`：`less_than`（超卖）或 `greater_than`（超买）
+   - `oversold`/`overbought`：阈值（默认 30/70）
+
+3. **volume**：成交量
+   - `period`：平均周期
+   - `multiplier`：倍数（当前量 > 平均量 × 倍数）
+
+4. **price_breakout**：价格突破
+   - `period`：参考周期
+   - `breakout_type`：`resistance`（阻力）或 `support`（支撑）
+   - `confirmation_bars`：确认 K 线数
+
+5. **bollinger_bands**：布林带
+   - `period`：周期（默认 20）
+   - `std_dev`：标准差倍数（默认 2）
+   - `band`：`upper`（上轨）或 `lower`（下轨）
+   - `operator`：`touch`（触及）
+
+6. **macd**：MACD 指标
+   - `fast_period`/`slow_period`/`signal_period`
+   - `condition`：`bullish_divergence`（看涨）或 `bearish_divergence`（看跌）
+
+7. **price_change**：价格变化
+   - `period`：观察周期
+   - `min_change`：最小变化率（负值表示下跌）
+
+## 执行流程
+
+### 1. K 线数据处理
+```python
+# 策略引擎接收 K 线数据
+await strategy_engine.process_kline(symbol, bar_data)
+
+# 内部流程：
+# 1. 更新 KLineBuffer（最多 200 条）
+# 2. 检查所有启用的策略
+# 3. 评估买入/卖出条件
+# 4. 执行交易决策
+```
+
+### 2. 入场逻辑
+- **最优信号分析**（`use_optimal_signals=true`）：
+  - 调用 [backend/app/optimal_trading_signals.py](mdc:backend/app/optimal_trading_signals.py)
+  - 综合多维度因素（技术指标、趋势强度、波动率等）
+  - 置信度 ≥ 0.6 才执行交易
+  - 动态调整止损/止盈/仓位大小
+
+- **传统条件评估**（`use_optimal_signals=false`）：
+  - 逐条检查 `conditions.buy` 列表
+  - 所有条件满足才触发买入
+
+### 3. 出场逻辑
+- **最优出场分析**：置信度 ≥ 0.7
+- **传统止损止盈**：
+  - 止损：当前价 ≤ 入场价 × (1 - stop_loss)
+  - 止盈：当前价 ≥ 入场价 × (1 + take_profit)
+  - 追踪止损：价格上涨时动态上移止损位
+
+### 4. 风险控制检查
+- 单策略最大持仓数（`max_positions`）
+- 全局最大持仓数（`max_total_positions`）
+- 单日最大交易次数（`max_daily_trades`）
+- 单品种不重复开仓
+- 冷却期（`cooldown_period`）：交易后 N 秒内不再开新仓
+
+## 仓位与订单管理
+
+### Position 数据结构
+```python
+@dataclass
+class Position:
+    symbol: str
+    side: OrderSide              # BUY/SELL
+    quantity: int
+    entry_price: float
+    entry_time: datetime
+    stop_loss: float
+    take_profit: float
+    strategy_id: str
+    status: str                  # open/closed
+    exit_price: Optional[float]
+    exit_time: Optional[datetime]
+    pnl: Optional[float]
+    order_id: Optional[str]      # Longbridge 订单 ID
+    is_simulation: bool          # 是否模拟仓位
+```
+
+### 集成 Longbridge API
+- 买入时调用 [backend/app/trading_api.py](mdc:backend/app/trading_api.py) 的 `place_order()`
+- 订单提交成功后更新 `position.order_id`
+- 订单被拒绝时删除模拟仓位
+- 失败时保留模拟仓位并标记 `is_simulation=True`
+
+## 策略状态机
+
+### StrategyStatus
+- `IDLE`：空闲
+- `MONITORING`：监控中
+- `TRIGGERED`：已触发信号
+- `EXECUTING`：执行中
+- `COOLDOWN`：冷却期
+
+## 通知集成
+
+策略引擎自动发送以下通知：
+- `order_placed`：订单已下达（模拟）
+- `optimal_order_placed`：最优信号订单已下达
+- `order_submitted`：真实订单已提交
+- `order_rejected`：订单被拒绝
+- `order_filled`：订单已成交（卖出）
+- `optimal_signal_triggered`：最优信号触发
+- `optimal_exit_signal`：最优出场信号
+
+通过 [backend/app/notification_manager.py](mdc:backend/app/notification_manager.py) 发送
+
+## API 端点
+
+路由：[backend/app/routers/strategies.py](mdc:backend/app/routers/strategies.py)
+
+- `GET /strategies/`：获取所有策略配置
+- `GET /strategies/status`：获取策略运行状态
+- `PUT /strategies/{strategy_id}`：更新策略配置
+- `POST /strategies/{strategy_id}/enable`：启用策略
+- `POST /strategies/{strategy_id}/disable`：禁用策略
+- `POST /strategies/reload`：重新加载配置文件
+
+## 注意事项
+
+1. **数据要求**：
+   - K 线缓冲区至少 50 条才开始评估
+   - 指标计算需要足够历史数据（如 MA20 需要 ≥20 条）
+
+2. **并发安全**：
+   - 使用全局单例避免重复初始化
+   - 策略配置文件修改后需调用 `reload_strategies()`
+
+3. **仓位计算**：
+   - 默认基于模拟账户价值（100,000）
+   - 实际使用时应从 Longbridge API 获取真实资金
+
+4. **错误处理**：
+   - 条件评估失败返回 `False`
+   - 订单失败保留模拟仓位以便追踪
+   - 所有异常记录到日志
+
+参考文件：
+- [backend/app/strategy_engine.py](mdc:backend/app/strategy_engine.py)
+- [backend/app/optimal_trading_signals.py](mdc:backend/app/optimal_trading_signals.py)
+- [backend/app/trading_api.py](mdc:backend/app/trading_api.py)
+- [backend/app/routers/strategies.py](mdc:backend/app/routers/strategies.py)
+- [config/strategies.json](mdc:config/strategies.json)

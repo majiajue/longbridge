@@ -208,6 +208,59 @@
         "position_size": 0.15,
         "max_positions": 3
       }
+    },
+    {
+      "id": "high_buy_low_sell",
+      "name": "高买低卖动量策略",
+      "enabled": false,
+      "description": "突破高点买入、跌破低点卖出的动量追踪策略，适合趋势强劲的市场",
+      "symbols": ["AAPL.US", "TSLA.US"],
+      "use_optimal_signals": true,
+      "conditions": {
+        "buy": [
+          {
+            "type": "price_breakout",
+            "params": {
+              "period": 20,
+              "breakout_type": "resistance",
+              "confirmation_bars": 2
+            }
+          },
+          {
+            "type": "volume",
+            "params": {
+              "multiplier": 1.8,
+              "period": 20,
+              "operator": "greater_than"
+            }
+          },
+          {
+            "type": "rsi",
+            "params": {
+              "period": 14,
+              "overbought": 75,
+              "operator": "less_than"
+            }
+          }
+        ],
+        "sell": [
+          {
+            "type": "price_breakout",
+            "params": {
+              "period": 10,
+              "breakout_type": "support",
+              "confirmation_bars": 1
+            }
+          }
+        ]
+      },
+      "risk_management": {
+        "stop_loss": 0.06,
+        "take_profit": 0.18,
+        "position_size": 0.12,
+        "max_positions": 2,
+        "trailing_stop": 0.04
+      }
     }
   ],
   "global_settings": {

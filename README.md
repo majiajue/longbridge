@@ -64,16 +64,6 @@ A comprehensive automated trading system with intelligent signal analysis for th
 └─────────────┘
 ```
 
-### 关键技术约定（同步自 docs/DECISIONS.md）
-
-- DuckDB 连接：进程内复用单例连接并用互斥锁串行化访问，避免并发打开同一 DB 文件导致的 “Unique file handle conflict”。实现见 `backend/app/db.py`。
-- 实时 K 线：前端“实时K线”采用分钟线流更新。首屏拉取 1000 根 `min1`，随后按 WebSocket 推送以分钟桶增量更新；若无历史 OHLC，则回退由 ticks 聚合的分钟线以避免空白。实现见 `backend/app/routers/quotes.py`、`backend/app/repositories.py` 与 `frontend/src/pages/RealtimeKLine.tsx`。
-- 设置接口稳定性：`/settings/symbols` 由上述 DB 策略修复并发 500。
-- 策略控制中心：`/strategies/positions/all` 合并真实账户持仓，即便策略未建仓也能显示账户现有持仓。
-- 时间戳一致性：图表统一使用数值型 UTC 秒时间戳，避免字符串/数值混用导致图形不更新。
-
-更多细节与后续规划见：`docs/DECISIONS.md`。
-
 ### 后端架构（FastAPI + Longbridge SDK + DuckDB + AI Signals）
 
 | 模块 | 文件 | 功能说明 |
@@ -144,166 +134,27 @@ LONGPORT_ACCESS_TOKEN=your-access-token
 
 ### 3. 启动系统
 
-#### 🔧 启动后端服务器
+#### 启动后端服务器
 
-**开发模式（推荐）**：
-```bash
-# 进入后端目录
-cd backend
-
-# 激活虚拟环境
-source .venv/bin/activate  # Linux/macOS
-# .venv\Scripts\activate   # Windows
-
-# 启动开发服务器（支持热重载）
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level info
-```
-
-**生产模式**：
 ```bash
 cd backend
 source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-**Docker 启动（可选）**：
+后端将启动以下服务：
+- REST API：`http://localhost:8000`
+- WebSocket 行情流：`ws://localhost:8000/ws/quotes`
+- API 文档：`http://localhost:8000/docs`
+
+#### 启动前端界面
+
 ```bash
-# 构建镜像
-docker build -t longbridge-backend ./backend
-
-# 运行容器
-docker run -p 8000:8000 -v $(pwd)/data:/app/data longbridge-backend
-```
-
-**启动成功标志**：
-后端启动后，你将看到类似以下输出：
-```
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-INFO:     Started reloader process [xxxxx] using StatReload
-INFO:app.main:startup: entering handler
-INFO:app.streaming:Portfolio update thread started
-INFO:app.main:startup: position monitor started
-```
-
-后端服务包括：
-- 🌐 **REST API**：`http://localhost:8000`
-- 📡 **WebSocket 行情流**：`ws://localhost:8000/ws/quotes`
-- 📖 **API 文档**：`http://localhost:8000/docs`
-- ❤️ **健康检查**：`http://localhost:8000/health`
-
-#### 🎨 启动前端界面
-
-**开发模式（推荐）**：
-```bash
-# 进入前端目录
 cd frontend
-
-# 安装依赖（首次运行）
-npm install
-
-# 启动开发服务器
 npm run dev
 ```
 
-**指定后端地址**：
-```bash
-# 如果后端运行在其他地址
-VITE_API_BASE=http://127.0.0.1:8000 npm run dev
-```
-
-**生产构建**：
-```bash
-# 构建生产版本
-npm run build
-
-# 预览生产构建
-npm run preview
-
-# 使用静态服务器部署（可选）
-npx serve dist
-```
-
-**启动成功标志**：
-前端启动后，你将看到：
-```
-  VITE v5.4.20  ready in 543 ms
-
-  ➜  Local:   http://localhost:5173/
-  ➜  Network: http://192.168.1.100:5173/
-  ➜  press h + enter to show help
-```
-
-前端访问地址：
-- 🏠 **开发服务器**：`http://localhost:5173`
-- 🌍 **局域网访问**：`http://your-ip:5173`（显示在启动日志中）
-
-#### 🚀 一键启动脚本
-
-创建启动脚本方便日常使用：
-
-**Linux/macOS** (`start.sh`)：
-```bash
-#!/bin/bash
-echo "🚀 启动 Longbridge Quant Console..."
-
-# 启动后端
-echo "📊 启动后端服务器..."
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload &
-BACKEND_PID=$!
-
-# 等待后端启动
-sleep 5
-
-# 启动前端
-echo "🎨 启动前端界面..."
-cd ../frontend
-npm run dev &
-FRONTEND_PID=$!
-
-echo "✅ 系统启动完成！"
-echo "📊 后端: http://localhost:8000"
-echo "🎨 前端: http://localhost:5173"
-echo "📖 API文档: http://localhost:8000/docs"
-
-# 优雅关闭
-trap "kill $BACKEND_PID $FRONTEND_PID" EXIT
-wait
-```
-
-**Windows** (`start.bat`)：
-```batch
-@echo off
-echo 🚀 启动 Longbridge Quant Console...
-
-echo 📊 启动后端服务器...
-cd backend
-call .venv\Scripts\activate
-start /B uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
-
-timeout /t 5 >nul
-
-echo 🎨 启动前端界面...
-cd ..\frontend
-start /B npm run dev
-
-echo ✅ 系统启动完成！
-echo 📊 后端: http://localhost:8000
-echo 🎨 前端: http://localhost:5173
-echo 📖 API文档: http://localhost:8000/docs
-
-pause
-```
-
-使用方法：
-```bash
-# 给脚本执行权限
-chmod +x start.sh
-
-# 运行启动脚本
-./start.sh
-```
+前端默认运行在 `http://localhost:5173`
 
 ### 4. 初始配置
 
@@ -566,189 +417,13 @@ npm run format  # TypeScript 代码格式化
 
 ---
 
-## ⚡ 快速参考命令
-
-### 🚀 日常启动命令
-
-```bash
-# === 后端启动 ===
-cd backend
-source .venv/bin/activate                                    # 激活环境
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload   # 开发模式
-uvicorn app.main:app --host 0.0.0.0 --port 8000             # 生产模式
-
-# === 前端启动 ===
-cd frontend
-npm install                                                  # 安装依赖（首次）
-npm run dev                                                  # 开发模式
-npm run build                                               # 构建生产版本
-npm run preview                                             # 预览构建结果
-
-# === 环境配置 ===
-python3 -m venv .venv                                       # 创建虚拟环境
-pip install -e .                                            # 安装后端依赖
-```
-
-### 🔧 系统管理命令
-
-```bash
-# === 服务状态检查 ===
-curl http://localhost:8000/health                          # 后端健康检查
-curl http://localhost:8000/quotes/stream/status            # 行情流状态
-curl http://localhost:8000/strategies/status               # 策略引擎状态
-
-# === 数据管理 ===
-# 备份数据库
-cp backend/data/quant.db backup/quant_$(date +%Y%m%d).db
-
-# 备份配置
-cp config/strategies.json backup/strategies_$(date +%Y%m%d).json
-
-# 清空缓存（重置系统）
-rm -f backend/data/quant.db backend/data/encryption.key
-```
-
-### 📊 API 测试命令
-
-```bash
-# === 配置API ===
-# 获取当前配置
-curl http://localhost:8000/settings/credentials
-curl http://localhost:8000/settings/symbols
-
-# 验证连接
-curl -X POST http://localhost:8000/settings/verify \
-  -H "Content-Type: application/json" \
-  -d '{"app_key":"your-key","app_secret":"your-secret","access_token":"your-token"}'
-
-# === 行情API ===
-# 同步历史数据
-curl -X POST http://localhost:8000/quotes/history/sync \
-  -H "Content-Type: application/json" \
-  -d '{"symbols":["AAPL.US","700.HK"],"period":"day","count":100}'
-
-# 查询历史K线
-curl "http://localhost:8000/quotes/history?symbol=AAPL.US&limit=50&period=day"
-
-# 查询实时tick
-curl "http://localhost:8000/quotes/ticks?symbol=AAPL.US&limit=10"
-
-# === 持仓API ===
-# 获取持仓列表
-curl http://localhost:8000/portfolio/positions
-
-# 获取持仓概览
-curl http://localhost:8000/portfolio/overview
-
-# === 策略API ===
-# 获取所有策略
-curl http://localhost:8000/strategies/
-
-# 启用策略
-curl -X POST http://localhost:8000/strategies/ma_crossover/enable
-
-# 获取策略持仓
-curl http://localhost:8000/strategies/positions/all
-
-# === 信号分析API ===
-# 分析个股信号
-curl "http://localhost:8000/signals/analyze/AAPL.US?signal_type=both&lookback_days=30"
-
-# 获取市场概览
-curl http://localhost:8000/signals/market_overview
-
-# 批量分析
-curl "http://localhost:8000/signals/analyze/batch?symbols=AAPL.US,GOOGL.US&min_confidence=0.7"
-
-# === 监控API ===
-# 获取持仓监控状态
-curl http://localhost:8000/monitoring/status
-
-# 获取全局监控设置
-curl http://localhost:8000/monitoring/global-settings
-
-# 更新持仓监控配置
-curl -X PUT http://localhost:8000/monitoring/position/AAPL.US \
-  -H "Content-Type: application/json" \
-  -d '{"stop_loss_ratio":0.05,"take_profit_ratio":0.15,"monitoring_status":"ACTIVE"}'
-```
-
-### 🐛 故障排查命令
-
-```bash
-# === 进程检查 ===
-ps aux | grep uvicorn                                       # 检查后端进程
-ps aux | grep node                                          # 检查前端进程
-lsof -i :8000                                              # 检查端口占用
-lsof -i :5173
-
-# === 日志查看 ===
-tail -f backend/logs/app.log                               # 实时查看后端日志
-journalctl -f -u longbridge-backend                        # 系统服务日志（Linux）
-
-# === 网络测试 ===
-curl -I http://localhost:8000                              # 测试后端连通性
-telnet localhost 8000                                      # 测试端口可达性
-ping api.longbridge.com                                    # 测试外部API连通性
-
-# === 性能监控 ===
-htop                                                       # 系统资源监控
-du -sh backend/data/                                       # 数据库大小
-netstat -tuln | grep :8000                                # 网络连接状态
-```
-
-### 🔄 开发工作流命令
-
-```bash
-# === 代码更新流程 ===
-git pull origin main                                       # 拉取最新代码
-cd backend && pip install -e .                            # 更新后端依赖
-cd frontend && npm install                                 # 更新前端依赖
-
-# === 测试命令 ===
-cd backend && python -m pytest tests/                     # 运行后端测试
-cd frontend && npm test                                    # 运行前端测试
-cd frontend && npm run type-check                         # TypeScript类型检查
-
-# === 代码质量 ===
-cd backend && black app/                                  # Python代码格式化
-cd backend && flake8 app/                                 # Python代码检查
-cd frontend && npm run lint                               # 前端代码检查
-cd frontend && npm run format                             # 前端代码格式化
-
-# === 数据库操作 ===
-cd backend && python -c "
-from app.repositories import get_db_connection
-conn = get_db_connection()
-print(conn.execute('SELECT name FROM sqlite_master WHERE type=\\\"table\\\";').fetchall())
-"                                                         # 查看数据库表结构
-```
-
-### ⚙️ 配置文件路径
-
-```bash
-# === 重要配置文件 ===
-backend/.env                                               # 环境变量配置
-config/strategies.json                                     # 策略配置
-backend/data/quant.db                                     # 主数据库
-backend/data/encryption.key                               # 加密密钥
-frontend/.env.local                                       # 前端环境配置（可选）
-
-# === 日志文件 ===
-backend/logs/app.log                                      # 应用日志
-backend/logs/trading.log                                  # 交易日志
-backend/logs/signals.log                                  # 信号分析日志
-```
-
----
-
 ## 📞 支持和反馈
 
-- 📧 邮箱支持：[your-email@example.com]
-- 💬 GitHub Issues：[提交问题和建议](https://github.com/your-repo/issues)
+- 📧 邮箱支持：[gymayong@gmail.com]
+- 💬 GitHub Issues：[提交问题和建议](https://github.com/majiajue/longbridge/issues)
 - 📚 文档：查看 `docs/` 目录获取更多技术文档
 - 🚀 更新日志：查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新
 
 ---
 
-*最后更新：2024-09-24 | 版本：v2.0.0 - 智能信号分析版*
+*最后更新：2025-09-24 | 版本：v2.0.0 - 智能信号分析版*

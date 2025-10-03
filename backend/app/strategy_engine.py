@@ -555,16 +555,22 @@ class StrategyEngine:
         return price_change <= min_change
 
     async def execute_buy(self, strategy_id: str, strategy: Dict, symbol: str, market_data: MarketData):
-        """Execute buy order"""
+        """Execute buy order with position limit management"""
         try:
             # Check risk management rules
             risk_mgmt = strategy.get('risk_management', {})
 
-            # Check max positions
+            # Check max positions for this strategy
             strategy_positions = [p for p in self.positions.values()
                                  if p.strategy_id == strategy_id and p.status == 'open']
             if len(strategy_positions) >= risk_mgmt.get('max_positions', 3):
                 logger.info(f"Max positions reached for strategy {strategy_id}")
+                return
+
+            # Check global position limits
+            total_open_positions = [p for p in self.positions.values() if p.status == 'open']
+            if len(total_open_positions) >= self.global_settings.get('max_total_positions', 5):
+                logger.info("Global max positions reached")
                 return
 
             # Check daily trade limit
@@ -572,9 +578,22 @@ class StrategyEngine:
                 logger.info("Daily trade limit reached")
                 return
 
-            # Calculate position size (simplified - should use actual account balance)
-            position_size = risk_mgmt.get('position_size', 0.1)
-            quantity = 100  # Simplified - should calculate based on account and position size
+            # Check if we already have a position in this symbol
+            symbol_positions = [p for p in self.positions.values()
+                               if p.symbol == symbol and p.status == 'open']
+            if symbol_positions:
+                logger.info(f"Already have an open position in {symbol}")
+                return
+
+            # Enhanced position size calculation based on available capital and risk
+            position_size_ratio = risk_mgmt.get('position_size', 0.1)
+            max_risk_per_trade = self.global_settings.get('max_risk_per_trade', 0.02)
+
+            # Calculate quantity based on position size and risk management
+            # In a real system, this would use actual account balance
+            estimated_account_value = 100000  # Mock account value
+            position_value = estimated_account_value * position_size_ratio
+            quantity = max(1, int(position_value / market_data.close))
 
             # Calculate stop loss and take profit prices
             stop_loss_pct = risk_mgmt.get('stop_loss', 0.05)

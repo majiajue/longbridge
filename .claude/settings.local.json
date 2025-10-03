@@ -20,7 +20,14 @@
       "Read(//Volumes/SamSung/**)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(python3:*)",
+      "Bash(time curl:*)",
+      "mcp__ide__getDiagnostics",
+      "WebFetch(domain:g2.antv.antgroup.com)",
+      "Bash(ping:*)",
+      "Bash(git remote set-url:*)",
+      "Bash(git config:*)"
     ],
     "deny": [],
     "ask": []
