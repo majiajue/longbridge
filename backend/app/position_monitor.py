@@ -20,7 +20,8 @@ from .repositories import (
     get_all_monitoring_configs,
     get_global_monitoring_settings,
     save_position_monitoring_config,
-    get_active_monitoring_symbols
+    get_active_monitoring_symbols,
+    save_monitoring_event
 )
 from .strategy_engine import get_strategy_engine, MarketData
 from .services import get_portfolio_overview, get_positions
@@ -374,6 +375,18 @@ class PositionMonitor:
 
             if signal:
                 position.signals_today += 1
+                
+                # Record signal event
+                self._record_event(
+                    event_type='signal_generated',
+                    symbol=position.symbol,
+                    strategy_id=strategy_id,
+                    strategy_name=strategy.get('name'),
+                    signal_action=signal['action'],
+                    price=signal.get('price'),
+                    message=signal.get('reason'),
+                    details=signal
+                )
 
                 if config.strategy_mode == StrategyMode.AUTO:
                     # Execute trade automatically
@@ -468,9 +481,26 @@ class PositionMonitor:
             self.daily_trades += 1
 
             # Calculate P&L if selling
+            pnl = None
+            pnl_ratio = None
             if signal['action'] == 'SELL':
                 pnl = (signal['price'] - position.avg_cost) * signal['quantity']
+                pnl_ratio = pnl / (position.avg_cost * signal['quantity']) if position.avg_cost > 0 else 0
                 self.daily_loss += pnl if pnl < 0 else 0
+            
+            # Record trade execution event
+            self._record_event(
+                event_type='trade_executed',
+                symbol=position.symbol,
+                strategy_id=strategy_id,
+                signal_action=signal['action'],
+                price=signal.get('price'),
+                quantity=signal.get('quantity'),
+                pnl=pnl,
+                pnl_ratio=pnl_ratio,
+                message=f"自动执行交易: {signal['action']} {signal['quantity']} @ {signal['price']}",
+                details=signal
+            )
 
             # Send notification
             await self.send_notification({
@@ -506,7 +536,48 @@ class PositionMonitor:
         # Log notification
         logger.info(f"Position Monitor Notification: {message}")
 
-        # TODO: Send through WebSocket, email, SMS etc.
+        # Send through WebSocket to all connected clients
+        from .streaming import quote_stream_manager
+        
+        notification_payload = {
+            "type": "monitoring_alert",
+            "alert_type": message.get('type', 'info'),
+            "symbol": message.get('position'),
+            "message": message.get('message', str(message)),
+            "severity": self._get_severity_from_type(message.get('type')),
+            "signal": message.get('signal'),
+            "strategy_id": message.get('strategy_id'),
+            "timestamp": message.get('timestamp', datetime.now().isoformat())
+        }
+        
+        quote_stream_manager._broadcast(notification_payload)
+        
+        # TODO: Send through email, SMS etc.
+    
+    def _get_severity_from_type(self, alert_type: str) -> str:
+        """Map alert type to severity level"""
+        severity_map = {
+            'trade_executed': 'success',
+            'trade_alert': 'warning',
+            'stop_loss': 'error',
+            'take_profit': 'success',
+            'risk_warning': 'warning',
+            'strategy_signal': 'info'
+        }
+        return severity_map.get(alert_type, 'info')
+    
+    def _record_event(self, event_type: str, symbol: str, **kwargs):
+        """Record a monitoring event to history"""
+        try:
+            event_data = {
+                'timestamp': datetime.now(),
+                'event_type': event_type,
+                'symbol': symbol,
+                **kwargs
+            }
+            save_monitoring_event(event_data)
+        except Exception as e:
+            logger.error(f"Error recording monitoring event: {e}")
 
     async def update_position_config(self, symbol: str, config: PositionMonitoringConfig):
         """Update monitoring configuration for a position"""

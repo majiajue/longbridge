@@ -106,21 +106,74 @@ export type PortfolioOverviewResponse = {
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:8000";
 
-function parseErrorMessage(text: string, status: number): string {
-  let message = text || `Request failed with status ${status}`;
+export class APIError extends Error {
+  status: number;
+  errorCode?: string;
+  solution?: string;
+  steps?: string[];
+  platformUrl?: string;
+  rawError?: string;
+
+  constructor(message: string, options: {
+    status: number;
+    errorCode?: string;
+    solution?: string;
+    steps?: string[];
+    platformUrl?: string;
+    rawError?: string;
+  }) {
+    super(message);
+    this.name = 'APIError';
+    this.status = options.status;
+    this.errorCode = options.errorCode;
+    this.solution = options.solution;
+    this.steps = options.steps;
+    this.platformUrl = options.platformUrl;
+    this.rawError = options.rawError;
+  }
+}
+
+function parseErrorMessage(text: string, status: number): string | APIError {
   try {
     const parsed = JSON.parse(text);
-    message = parsed.detail ?? message;
+    
+    // 如果是新的详细错误格式
+    if (parsed.detail && typeof parsed.detail === 'object') {
+      const detail = parsed.detail;
+      return new APIError(
+        detail.message || `请求失败 (${status})`,
+        {
+          status,
+          errorCode: detail.error_code || detail.error,
+          solution: detail.solution,
+          steps: detail.steps,
+          platformUrl: detail.platform_url,
+          rawError: detail.raw_error
+        }
+      );
+    }
+    
+    // 兼容旧格式
+    if (parsed.detail) {
+      return typeof parsed.detail === 'string' 
+        ? parsed.detail 
+        : JSON.stringify(parsed.detail);
+    }
   } catch {
     // 非 JSON 响应忽略
   }
-  return message;
+  
+  return `请求失败 (${status})`;
 }
 
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(parseErrorMessage(text, res.status));
+    const error = parseErrorMessage(text, res.status);
+    if (error instanceof APIError) {
+      throw error;
+    }
+    throw new Error(error);
   }
 
   if (res.status === 204) {

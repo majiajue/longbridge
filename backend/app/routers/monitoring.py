@@ -22,7 +22,9 @@ from ..repositories import (
     get_all_monitoring_configs,
     get_global_monitoring_settings,
     save_global_monitoring_settings,
-    get_active_monitoring_symbols
+    get_active_monitoring_symbols,
+    get_monitoring_events,
+    get_monitoring_events_count
 )
 from ..position_monitor import get_position_monitor
 from ..services import get_portfolio_overview
@@ -369,4 +371,35 @@ async def include_in_monitoring(symbol: str) -> Dict[str, str]:
         raise
     except Exception as e:
         logger.error(f"Error including {symbol} in monitoring: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/events")
+async def get_events(
+    symbol: Optional[str] = None,
+    event_type: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 50
+) -> Dict[str, Any]:
+    """Get monitoring event history"""
+    try:
+        offset = (page - 1) * page_size
+        events = get_monitoring_events(
+            symbol=symbol,
+            event_type=event_type,
+            limit=page_size,
+            offset=offset
+        )
+        total = get_monitoring_events_count(symbol=symbol, event_type=event_type)
+        
+        return {
+            "events": events,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size
+        }
+    
+    except Exception as e:
+        logger.error(f"Error getting monitoring events: {e}")
         raise HTTPException(status_code=500, detail=str(e))

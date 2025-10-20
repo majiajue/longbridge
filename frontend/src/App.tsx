@@ -6,8 +6,10 @@ import RealtimeKLinePage from "./pages/RealtimeKLine";
 import StrategyControlPage from "./pages/StrategyControl";
 import PositionMonitoringPage from "./pages/PositionMonitoring";
 import SignalAnalysisPage from "./pages/SignalAnalysis";
+import StrategyWatchPage from "./pages/StrategyWatch";
+import PositionKLinesPage from "./pages/PositionKLines";
 
-type TabType = "settings" | "realtime" | "history" | "realtime-chart" | "strategy" | "monitoring" | "signals";
+type TabType = "settings" | "realtime" | "history" | "realtime-chart" | "strategy" | "monitoring" | "signals" | "strategy-watch" | "position-klines";
 
 interface TabItem {
   id: TabType;
@@ -17,12 +19,14 @@ interface TabItem {
 
 const tabs: TabItem[] = [
   { id: "settings", label: "基础配置", icon: "⚙️" },
-  { id: "realtime", label: "实时行情", icon: "📊" },
+  { id: "position-klines", label: "持仓K线", icon: "📊" },
+  { id: "strategy-watch", label: "策略盯盘", icon: "🎯" },
+  { id: "monitoring", label: "持仓监控", icon: "👁️" },
+  { id: "realtime", label: "实时行情", icon: "💹" },
   { id: "realtime-chart", label: "实时K线", icon: "📉" },
   { id: "history", label: "历史K线", icon: "📈" },
   { id: "strategy", label: "策略控制", icon: "🤖" },
   { id: "signals", label: "信号分析", icon: "🧠" },
-  { id: "monitoring", label: "持仓监控", icon: "👁️" },
 ];
 
 export default function App() {
@@ -110,12 +114,14 @@ export default function App() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="animate-fade-in">
           {activeTab === "settings" && <SettingsPage />}
+          {activeTab === "position-klines" && <PositionKLinesPage />}
+          {activeTab === "strategy-watch" && <StrategyWatchPage />}
+          {activeTab === "monitoring" && <PositionMonitoringPage />}
           {activeTab === "realtime" && <RealtimePage />}
           {activeTab === "realtime-chart" && <RealtimeKLinePage />}
           {activeTab === "history" && <HistoryPage />}
           {activeTab === "strategy" && <StrategyControlPage />}
           {activeTab === "signals" && <SignalAnalysisPage />}
-          {activeTab === "monitoring" && <PositionMonitoringPage />}
         </div>
       </main>
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Box,
   Card,
@@ -34,6 +34,7 @@ import {
   Stack,
   Tooltip,
   Badge,
+  LinearProgress,
 } from '@mui/material';
 import SettingsIcon from '@mui/icons-material/Settings';
 import PlayIcon from '@mui/icons-material/PlayCircleOutlineOutlined';
@@ -48,6 +49,9 @@ import EyeIcon from '@mui/icons-material/RemoveRedEye';
 import EyeOffIcon from '@mui/icons-material/VisibilityOffRounded';
 import SpeedIcon from '@mui/icons-material/SpeedOutlined';
 import SecurityIcon from '@mui/icons-material/SecurityRounded';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import { resolveWsUrl } from '../api/client';
 
 interface PositionMonitoring {
   symbol: string;
@@ -103,6 +107,12 @@ export default function PositionMonitoringPage() {
   }>({ open: false, position: null });
   const [settingsDialog, setSettingsDialog] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [wsConnected, setWsConnected] = useState(false);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
+  const [notifications, setNotifications] = useState<Array<{id: string; message: string; type: 'info' | 'warning' | 'error' | 'success'; timestamp: Date}>>([]);
+  const wsRef = useRef<WebSocket | null>(null);
+  const priceFlashTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
   // Load positions with monitoring config
   const loadPositions = async () => {
@@ -212,11 +222,124 @@ export default function PositionMonitoringPage() {
     }
   };
 
+  // WebSocket connection for real-time updates
+  const connectWebSocket = useCallback(() => {
+    const wsUrl = resolveWsUrl('/ws/quotes');
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('WebSocket connected for position monitoring');
+      setWsConnected(true);
+      setError(null);
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        
+        // Handle quote updates
+        if (data.type === 'quote' && data.symbol) {
+          updatePositionPrice(data.symbol, data.last_done || data.close);
+        }
+        
+        // Handle monitoring alerts
+        if (data.type === 'monitoring_alert') {
+          addNotification({
+            message: data.message,
+            type: data.severity || 'info',
+          });
+        }
+        
+        // Handle portfolio updates
+        if (data.type === 'portfolio_update') {
+          setLastUpdate(new Date());
+          // Optionally reload positions
+          loadPositions();
+        }
+      } catch (e) {
+        console.error('Error parsing WebSocket message:', e);
+      }
+    };
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      setWsConnected(false);
+    };
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected, reconnecting...');
+      setWsConnected(false);
+      setTimeout(connectWebSocket, 3000);
+    };
+
+    wsRef.current = ws;
+  }, []);
+
+  // Update position price with flash effect
+  const updatePositionPrice = (symbol: string, newPrice: number) => {
+    setPositions((prev) => {
+      return prev.map((pos) => {
+        if (pos.symbol === symbol) {
+          const oldPrice = pos.current_price;
+          const pnl = (newPrice - pos.avg_cost) * pos.quantity;
+          const pnl_ratio = (newPrice - pos.avg_cost) / pos.avg_cost;
+          
+          // Set flash effect
+          if (newPrice > oldPrice) {
+            setPriceFlash((f) => ({ ...f, [symbol]: 'up' }));
+          } else if (newPrice < oldPrice) {
+            setPriceFlash((f) => ({ ...f, [symbol]: 'down' }));
+          }
+          
+          // Clear flash after animation
+          if (priceFlashTimeouts.current[symbol]) {
+            clearTimeout(priceFlashTimeouts.current[symbol]);
+          }
+          priceFlashTimeouts.current[symbol] = setTimeout(() => {
+            setPriceFlash((f) => ({ ...f, [symbol]: null }));
+          }, 1000);
+          
+          return {
+            ...pos,
+            current_price: newPrice,
+            market_value: newPrice * pos.quantity,
+            pnl,
+            pnl_ratio,
+          };
+        }
+        return pos;
+      });
+    });
+  };
+
+  // Add notification
+  const addNotification = (notification: { message: string; type: 'info' | 'warning' | 'error' | 'success' }) => {
+    const id = Date.now().toString();
+    setNotifications((prev) => [
+      { id, ...notification, timestamp: new Date() },
+      ...prev.slice(0, 9), // Keep last 10
+    ]);
+    
+    // Auto-remove after 10 seconds
+    setTimeout(() => {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    }, 10000);
+  };
+
   useEffect(() => {
     loadPositions();
-    const interval = setInterval(loadPositions, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
-  }, []);
+    connectWebSocket();
+    
+    const interval = setInterval(loadPositions, 30000); // Refresh every 30s (WS provides real-time)
+    
+    return () => {
+      clearInterval(interval);
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+      Object.values(priceFlashTimeouts.current).forEach(clearTimeout);
+    };
+  }, [connectWebSocket]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -252,6 +375,12 @@ export default function PositionMonitoringPage() {
     );
   }
 
+  // Calculate totals
+  const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
+  const totalMarketValue = positions.reduce((sum, p) => sum + p.market_value, 0);
+  const totalCost = positions.reduce((sum, p) => sum + p.avg_cost * p.quantity, 0);
+  const totalPnlRatio = totalCost > 0 ? totalPnl / totalCost : 0;
+
   return (
     <Box className="animate-fade-in">
       {/* Header */}
@@ -266,7 +395,7 @@ export default function PositionMonitoringPage() {
                 为每个持仓配置个性化的监控策略
               </Typography>
             </Box>
-            <Stack direction="row" spacing={2}>
+            <Stack direction="row" spacing={2} alignItems="center">
               <Badge badgeContent={positions.filter(p => p.monitoring_status === 'active').length} color="success">
                 <Chip
                   icon={<EyeIcon />}
@@ -281,6 +410,15 @@ export default function PositionMonitoringPage() {
                   sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
                 />
               </Badge>
+              <Tooltip title={wsConnected ? '实时连接正常' : '连接断开'}>
+                <Chip
+                  icon={wsConnected ? <CheckCircleIcon /> : <WarningIcon />}
+                  label={wsConnected ? '实时' : '离线'}
+                  color={wsConnected ? 'success' : 'default'}
+                  size="small"
+                  sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
+                />
+              </Tooltip>
               <Button
                 variant="contained"
                 color="inherit"
@@ -290,10 +428,100 @@ export default function PositionMonitoringPage() {
               >
                 全局设置
               </Button>
+              <IconButton onClick={loadPositions} sx={{ color: 'white' }}>
+                <RefreshIcon />
+              </IconButton>
             </Stack>
           </Box>
         </CardContent>
       </Card>
+
+      {/* Portfolio Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 3 }}>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                总市值
+              </Typography>
+              <Typography variant="h5" fontWeight="bold">
+                ${totalMarketValue.toFixed(2)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                成本: ${totalCost.toFixed(2)}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                {totalPnl >= 0 ? <TrendingUpIcon color="success" /> : <TrendingDownIcon color="error" />}
+                <Typography color="text.secondary" gutterBottom>
+                  总盈亏
+                </Typography>
+              </Stack>
+              <Typography variant="h5" fontWeight="bold" color={totalPnl >= 0 ? 'success.main' : 'error.main'}>
+                {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+              </Typography>
+              <Typography variant="caption" color={totalPnl >= 0 ? 'success.main' : 'error.main'}>
+                {totalPnl >= 0 ? '+' : ''}{(totalPnlRatio * 100).toFixed(2)}%
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                持仓数量
+              </Typography>
+              <Typography variant="h5" fontWeight="bold">
+                {positions.length}
+              </Typography>
+              <Typography variant="caption" color="success.main">
+                监控中: {positions.filter(p => p.monitoring_status === 'active').length}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <Card>
+            <CardContent>
+              <Typography color="text.secondary" gutterBottom>
+                最后更新
+              </Typography>
+              <Typography variant="h6">
+                {lastUpdate ? lastUpdate.toLocaleTimeString() : '--:--:--'}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {wsConnected ? '实时推送中' : '等待连接...'}
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Notifications */}
+      {notifications.length > 0 && (
+        <Box sx={{ mb: 2 }}>
+          {notifications.slice(0, 3).map((notif) => (
+            <Alert
+              key={notif.id}
+              severity={notif.type}
+              icon={<NotificationsActiveIcon />}
+              sx={{ mb: 1 }}
+              onClose={() => setNotifications((prev) => prev.filter((n) => n.id !== notif.id))}
+            >
+              <Typography variant="body2">{notif.message}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                {notif.timestamp.toLocaleTimeString()}
+              </Typography>
+            </Alert>
+          ))}
+        </Box>
+      )}
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -376,6 +604,7 @@ export default function PositionMonitoringPage() {
             {positions.map((position) => {
               const isSelected = selectedPositions.has(position.symbol);
               const isActive = position.monitoring_status === 'active';
+              const flash = priceFlash[position.symbol];
 
               return (
                 <TableRow
@@ -383,6 +612,12 @@ export default function PositionMonitoringPage() {
                   selected={isSelected}
                   sx={{
                     opacity: position.monitoring_status === 'excluded' ? 0.5 : 1,
+                    backgroundColor: flash === 'up' 
+                      ? 'rgba(76, 175, 80, 0.1)' 
+                      : flash === 'down' 
+                      ? 'rgba(244, 67, 54, 0.1)' 
+                      : undefined,
+                    transition: 'background-color 0.5s ease',
                   }}
                 >
                   <TableCell padding="checkbox">

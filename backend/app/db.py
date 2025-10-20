@@ -85,6 +85,25 @@ CREATE TABLE IF NOT EXISTS positions (
 );
 """
 
+_MONITORING_EVENTS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS monitoring_events (
+    id TEXT PRIMARY KEY,
+    ts TIMESTAMP NOT NULL,
+    event_type TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    symbol_name TEXT,
+    strategy_id TEXT,
+    strategy_name TEXT,
+    signal_action TEXT,
+    price DOUBLE,
+    quantity INTEGER,
+    pnl DOUBLE,
+    pnl_ratio DOUBLE,
+    message TEXT,
+    details TEXT
+);
+"""
+
 # A single shared connection guarded by a lock to avoid
 # DuckDB "Unique file handle conflict" when opening the same
 # database file concurrently from multiple threads.
@@ -114,6 +133,7 @@ def _run_migrations(conn: DuckDBPyConnection) -> None:
     conn.execute(_SIGNALS_TABLE_SQL)
     conn.execute(_ORDERS_TABLE_SQL)
     conn.execute(_POSITIONS_TABLE_SQL)
+    conn.execute(_MONITORING_EVENTS_TABLE_SQL)
     _ensure_column(conn, "ticks", "sequence", "BIGINT")
     _ensure_column(conn, "ticks", "turnover", "DOUBLE")
     _ensure_column(conn, "ticks", "current_volume", "DOUBLE")

@@ -234,3 +234,40 @@ class GlobalMonitoringUpdateRequest(BaseModel):
     risk_level: Optional[str] = None
     notifications_enabled: Optional[bool] = None
     excluded_symbols: Optional[List[str]] = None
+
+
+class MonitoringEventType(str, Enum):
+    """监控事件类型"""
+    SIGNAL_GENERATED = "signal_generated"
+    TRADE_EXECUTED = "trade_executed"
+    STOP_LOSS_TRIGGERED = "stop_loss_triggered"
+    TAKE_PROFIT_TRIGGERED = "take_profit_triggered"
+    ALERT_SENT = "alert_sent"
+    RISK_WARNING = "risk_warning"
+    CONFIG_CHANGED = "config_changed"
+
+
+class MonitoringEvent(BaseModel):
+    """监控历史事件"""
+    id: Optional[str] = None
+    timestamp: datetime
+    event_type: MonitoringEventType
+    symbol: str
+    symbol_name: Optional[str] = None
+    strategy_id: Optional[str] = None
+    strategy_name: Optional[str] = None
+    signal_action: Optional[str] = None  # BUY/SELL
+    price: Optional[float] = None
+    quantity: Optional[int] = None
+    pnl: Optional[float] = None
+    pnl_ratio: Optional[float] = None
+    message: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+
+class MonitoringEventListResponse(BaseModel):
+    """监控事件列表响应"""
+    events: List[MonitoringEvent] = Field(default_factory=list)
+    total: int = 0
+    page: int = 1
+    page_size: int = 50

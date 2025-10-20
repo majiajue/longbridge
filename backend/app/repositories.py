@@ -703,3 +703,103 @@ def get_active_monitoring_symbols() -> List[str]:
         """).fetchall()
 
         return [row[0] for row in rows]
+
+
+def save_monitoring_event(event_data: Dict) -> None:
+    """Save a monitoring event to history"""
+    import uuid
+    from datetime import datetime
+    
+    event_id = event_data.get('id') or str(uuid.uuid4())
+    timestamp = event_data.get('timestamp', datetime.now())
+    
+    # Convert datetime string to datetime object if needed
+    if isinstance(timestamp, str):
+        from datetime import datetime
+        timestamp = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+    
+    details_json = json.dumps(event_data.get('details', {})) if event_data.get('details') else None
+    
+    with get_connection() as conn:
+        conn.execute("""
+            INSERT INTO monitoring_events (
+                id, ts, event_type, symbol, symbol_name,
+                strategy_id, strategy_name, signal_action,
+                price, quantity, pnl, pnl_ratio, message, details
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, [
+            event_id,
+            timestamp,
+            event_data.get('event_type'),
+            event_data['symbol'],
+            event_data.get('symbol_name'),
+            event_data.get('strategy_id'),
+            event_data.get('strategy_name'),
+            event_data.get('signal_action'),
+            event_data.get('price'),
+            event_data.get('quantity'),
+            event_data.get('pnl'),
+            event_data.get('pnl_ratio'),
+            event_data.get('message'),
+            details_json
+        ])
+
+
+def get_monitoring_events(
+    symbol: Optional[str] = None,
+    event_type: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0
+) -> List[Dict]:
+    """Get monitoring events from history"""
+    with get_connection() as conn:
+        query = "SELECT * FROM monitoring_events WHERE 1=1"
+        params = []
+        
+        if symbol:
+            query += " AND symbol = ?"
+            params.append(symbol)
+        
+        if event_type:
+            query += " AND event_type = ?"
+            params.append(event_type)
+        
+        query += " ORDER BY ts DESC LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+        rows = conn.execute(query, params).fetchall()
+        columns = [desc[0] for desc in conn.description]
+        
+        events = []
+        for row in rows:
+            event = dict(zip(columns, row))
+            # Parse details JSON
+            if event.get('details'):
+                try:
+                    event['details'] = json.loads(event['details'])
+                except:
+                    pass
+            events.append(event)
+        
+        return events
+
+
+def get_monitoring_events_count(
+    symbol: Optional[str] = None,
+    event_type: Optional[str] = None
+) -> int:
+    """Get total count of monitoring events"""
+    with get_connection() as conn:
+        query = "SELECT COUNT(*) FROM monitoring_events WHERE 1=1"
+        params = []
+        
+        if symbol:
+            query += " AND symbol = ?"
+            params.append(symbol)
+        
+        if event_type:
+            query += " AND event_type = ?"
+            params.append(event_type)
+        
+        result = conn.execute(query, params).fetchone()
+        return result[0] if result else 0

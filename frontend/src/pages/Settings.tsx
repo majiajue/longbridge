@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import StatusSnackbar from "../components/StatusSnackbar";
+import ErrorDialog from "../components/ErrorDialog";
 import {
   Credentials,
   HistoryBar,
@@ -10,6 +11,7 @@ import {
   updateCredentials,
   updateSymbols,
   verifySettings,
+  APIError,
 } from "../api/client";
 
 const EMPTY_CREDS: Credentials = {
@@ -54,6 +56,10 @@ export default function SettingsPage() {
     message: string;
     severity: "success" | "info" | "warning" | "error";
   }>({ open: false, message: "", severity: "info" });
+  const [errorDialog, setErrorDialog] = useState<{ open: boolean; error: Error | APIError | null; title?: string }>({
+    open: false,
+    error: null,
+  });
 
   useEffect(() => {
     async function bootstrap() {
@@ -149,11 +155,20 @@ export default function SettingsPage() {
         severity: "success",
       });
     } catch (error) {
-      setSnackbar({
-        open: true,
-        message: error instanceof Error ? error.message : "验证失败",
-        severity: "error",
-      });
+      // 使用新的错误对话框显示详细错误信息
+      if (error instanceof APIError || error instanceof Error) {
+        setErrorDialog({
+          open: true,
+          error,
+          title: "凭据验证失败"
+        });
+      } else {
+        setSnackbar({
+          open: true,
+          message: "验证失败",
+          severity: "error",
+        });
+      }
     } finally {
       setVerifying(false);
     }
@@ -437,6 +452,13 @@ export default function SettingsPage() {
         message={snackbar.message}
         severity={snackbar.severity}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+      />
+      
+      <ErrorDialog
+        open={errorDialog.open}
+        error={errorDialog.error}
+        title={errorDialog.title}
+        onClose={() => setErrorDialog({ open: false, error: null })}
       />
     </div>
   );
