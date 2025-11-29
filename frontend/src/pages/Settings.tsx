@@ -3,12 +3,15 @@ import StatusSnackbar from "../components/StatusSnackbar";
 import ErrorDialog from "../components/ErrorDialog";
 import {
   Credentials,
+  AICredentials,
   HistoryBar,
   fetchCredentials,
+  fetchAICredentials,
   fetchHistory,
   fetchSymbols,
   syncHistory,
   updateCredentials,
+  updateAICredentials,
   updateSymbols,
   verifySettings,
   APIError,
@@ -18,6 +21,11 @@ const EMPTY_CREDS: Credentials = {
   LONGPORT_APP_KEY: "",
   LONGPORT_APP_SECRET: "",
   LONGPORT_ACCESS_TOKEN: "",
+};
+
+const EMPTY_AI_CREDS: AICredentials = {
+  DEEPSEEK_API_KEY: "",
+  TAVILY_API_KEY: "",  // ⬆️ 新增
 };
 
 const PERIOD_OPTIONS = [
@@ -41,6 +49,7 @@ const ADJUST_OPTIONS = [
 
 export default function SettingsPage() {
   const [credentials, setCredentials] = useState<Credentials>(EMPTY_CREDS);
+  const [aiCredentials, setAICredentials] = useState<AICredentials>(EMPTY_AI_CREDS);
   const [symbols, setSymbols] = useState<string>("");
   const [symbolList, setSymbolList] = useState<string[]>([]);
   const [selectedSymbol, setSelectedSymbol] = useState<string>("");
@@ -64,11 +73,13 @@ export default function SettingsPage() {
   useEffect(() => {
     async function bootstrap() {
       try {
-        const [creds, symbolsRes] = await Promise.all([
+        const [creds, aiCreds, symbolsRes] = await Promise.all([
           fetchCredentials(),
+          fetchAICredentials(),
           fetchSymbols(),
         ]);
         setCredentials({ ...EMPTY_CREDS, ...creds });
+        setAICredentials({ ...EMPTY_AI_CREDS, ...aiCreds });
         setSymbols(symbolsRes.symbols.join("\n"));
         setSymbolList(symbolsRes.symbols);
         setSelectedSymbol((prev) => prev || symbolsRes.symbols[0] || "");
@@ -100,6 +111,11 @@ export default function SettingsPage() {
       setCredentials((prev) => ({ ...prev, [key]: event.target.value }));
     };
 
+  const handleAICredChange = (key: keyof AICredentials) =>
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setAICredentials((prev) => ({ ...prev, [key]: event.target.value }));
+    };
+
   const handleSymbolsChange = (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -111,6 +127,20 @@ export default function SettingsPage() {
     try {
       await updateCredentials(credentials);
       setSnackbar({ open: true, message: "凭据保存成功", severity: "success" });
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: error instanceof Error ? error.message : "保存失败",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleAICredSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    try {
+      await updateAICredentials(aiCredentials);
+      setSnackbar({ open: true, message: "AI 凭据保存成功", severity: "success" });
     } catch (error) {
       setSnackbar({
         open: true,
@@ -300,6 +330,75 @@ export default function SettingsPage() {
               disabled={verifying}
             >
               {verifying ? "验证中..." : "🔍 验证凭据与行情"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* AI Credentials Configuration */}
+      <div className="card p-6">
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+          AI 配置
+        </h2>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+          配置 AI 服务的 API Key，用于 AI 分析、自动交易和新闻舆情分析功能。
+        </p>
+        <form onSubmit={handleAICredSubmit} className="space-y-4">
+          <div>
+            <label className="label">DeepSeek API Key</label>
+            <input
+              type="password"
+              className="input-field"
+              value={aiCredentials.DEEPSEEK_API_KEY}
+              onChange={handleAICredChange("DEEPSEEK_API_KEY")}
+              placeholder="输入你的 DeepSeek API Key"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              获取 API Key：<a 
+                href="https://platform.deepseek.com/api_keys" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary-600 dark:text-primary-400 hover:underline"
+              >
+                https://platform.deepseek.com/api_keys
+              </a>
+            </p>
+          </div>
+          
+          {/* ⬆️ 新增Tavily配置 */}
+          <div>
+            <label className="label">
+              Tavily API Key 
+              <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
+                🔍 新闻舆情分析（V3.0新增）
+              </span>
+            </label>
+            <input
+              type="password"
+              className="input-field"
+              value={aiCredentials.TAVILY_API_KEY || ""}
+              onChange={handleAICredChange("TAVILY_API_KEY")}
+              placeholder="输入你的 Tavily API Key（可选）"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              用于AI选股时搜索实时新闻和舆情分析，免费1000次/月。获取 API Key：
+              <a 
+                href="https://tavily.com/" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary-600 dark:text-primary-400 hover:underline ml-1"
+              >
+                https://tavily.com/
+              </a>
+            </p>
+            <div className="mt-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
+              💡 提示：配置Tavily后，AI选股将结合实时新闻进行综合评分（新闻舆情20分，V3.1舆情增强版）
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <button type="submit" className="btn-primary">
+              💾 保存 AI 配置
             </button>
           </div>
         </form>

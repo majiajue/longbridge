@@ -6,12 +6,21 @@ from ..exceptions import LongbridgeAPIError, LongbridgeDependencyMissing
 from ..models import (
     CredentialPayload,
     CredentialResponse,
+    AICredentialPayload,
+    AICredentialResponse,
     SymbolPayload,
     SymbolResponse,
     VerifyPayload,
     VerifyResponse,
 )
-from ..repositories import load_credentials, load_symbols, save_credentials, save_symbols
+from ..repositories import (
+    load_credentials,
+    load_symbols,
+    save_credentials,
+    save_symbols,
+    load_ai_credentials,
+    save_ai_credentials,
+)
 from ..services import verify_quote_access, sync_history_candlesticks
 from ..streaming import quote_stream_manager
 
@@ -91,6 +100,47 @@ def update_symbols(payload: SymbolPayload, background_tasks: BackgroundTasks) ->
         # 拉取 1 分钟线 1000 根（不复权）
         background_tasks.add_task(sync_history_candlesticks, symbols, "min1", "no_adjust", 1000, False)
 
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/ai-credentials", response_model=AICredentialResponse)
+def get_ai_credentials() -> AICredentialResponse:
+    """获取 AI 凭据（DeepSeek API Key 等）"""
+    creds = load_ai_credentials()
+    return AICredentialResponse(**creds)
+
+
+@router.put(
+    "/ai-credentials",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
+)
+def update_ai_credentials(payload: AICredentialPayload) -> Response:
+    """保存 AI 凭据（DeepSeek API Key 等）"""
+    # Validate input
+    if not payload.DEEPSEEK_API_KEY:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "invalid_input",
+                "message": "DeepSeek API Key 不能为空",
+                "solution": "请填写有效的 DeepSeek API Key",
+            }
+        )
+    
+    try:
+        save_ai_credentials(payload.model_dump())
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "save_failed",
+                "message": "保存 AI 凭据失败",
+                "raw_error": str(exc),
+                "solution": "请检查数据库连接或文件系统权限"
+            }
+        ) from exc
+    
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 

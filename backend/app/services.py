@@ -157,8 +157,8 @@ def sync_history_candlesticks(
                     logger.info(f"Got {len(candles)} candles for {symbol} using history_candlesticks_by_offset()")
             except Exception as exc:
                 raise LongbridgeAPIError(f"{symbol}: {exc}") from exc
-            inserted = store_candlesticks(symbol, candles)
-            logger.info(f"Inserted {inserted} records for {symbol}")
+            inserted = store_candlesticks(symbol, candles, period)  # 传递 period 参数
+            logger.info(f"Inserted {inserted} {period} records for {symbol}")
             results[symbol] = inserted
 
     return results
@@ -184,12 +184,12 @@ def _fetch_candlesticks_from_db(symbol: str, limit: int) -> List[Dict[str, float
     ]
 
 
-def get_cached_candlesticks(symbol: str, limit: int = 200) -> List[Dict[str, float]]:
+def get_cached_candlesticks(symbol: str, period: str = "day", limit: int = 200) -> List[Dict[str, float]]:
     if limit <= 0:
         raise ValueError("limit 必须大于 0")
 
     if _repo_fetch_candlesticks is not None:
-        bars = _repo_fetch_candlesticks(symbol, limit)
+        bars = _repo_fetch_candlesticks(symbol, period, limit)
         if bars:
             return bars
         # If no OHLC cached yet, try building minute bars from ticks

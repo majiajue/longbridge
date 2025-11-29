@@ -54,6 +54,10 @@ export default function SimpleKLineChart({
     // Chart margins
     const margin = { top: 20, right: 80, bottom: 60, left: 60 };
     const chartWidth = width - margin.left - margin.right;
+    
+    // 为成交量图分配30%的高度
+    const volumeHeight = (height - margin.top - margin.bottom) * 0.25;
+    const priceHeight = (height - margin.top - margin.bottom) * 0.75;
     const chartHeight = height - margin.top - margin.bottom;
 
     // Find price range
@@ -65,13 +69,18 @@ export default function SimpleKLineChart({
 
     // Scale functions
     const xScale = (index: number) => margin.left + (index * chartWidth) / (data.length - 1);
-    const yScale = (price: number) => margin.top + ((maxPrice + padding - price) * chartHeight) / (priceRange + padding * 2);
+    const yScale = (price: number) => margin.top + ((maxPrice + padding - price) * priceHeight) / (priceRange + padding * 2);
+    
+    // Volume scale
+    const maxVolume = Math.max(...data.map(d => d.volume));
+    const volumeYStart = margin.top + priceHeight + 10; // 价格图和成交量图之间留10px间隙
+    const volumeYScale = (volume: number) => volumeYStart + volumeHeight - (volume / maxVolume) * volumeHeight;
 
     // Draw grid
     ctx.strokeStyle = '#e5e7eb';
     ctx.lineWidth = 1;
 
-    // Horizontal grid lines
+    // Horizontal grid lines (价格区域)
     for (let i = 0; i <= 5; i++) {
       const price = minPrice + (i * priceRange) / 5;
       const y = yScale(price);
@@ -86,24 +95,63 @@ export default function SimpleKLineChart({
       ctx.textAlign = 'left';
       ctx.fillText(price.toFixed(2), margin.left + chartWidth + 5, y + 4);
     }
+    
+    // 成交量区域分界线
+    ctx.strokeStyle = '#d1d5db';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(margin.left, volumeYStart);
+    ctx.lineTo(margin.left + chartWidth, volumeYStart);
+    ctx.stroke();
+    
+    // 成交量标签
+    ctx.fillStyle = '#6b7280';
+    ctx.font = '10px system-ui';
+    ctx.textAlign = 'left';
+    const volumeLabel = maxVolume >= 1000000 
+      ? `${(maxVolume / 1000000).toFixed(1)}M` 
+      : maxVolume >= 1000 
+        ? `${(maxVolume / 1000).toFixed(1)}K`
+        : `${maxVolume.toFixed(0)}`;
+    ctx.fillText(volumeLabel, margin.left + chartWidth + 5, volumeYStart + 12);
 
-    // Vertical grid lines
+    // Vertical grid lines（贯穿价格图和成交量图）
+    ctx.strokeStyle = '#e5e7eb';
+    ctx.lineWidth = 1;
     const timeStep = Math.max(1, Math.floor(data.length / 8));
     for (let i = 0; i < data.length; i += timeStep) {
       const x = xScale(i);
       ctx.beginPath();
       ctx.moveTo(x, margin.top);
-      ctx.lineTo(x, margin.top + chartHeight);
+      ctx.lineTo(x, volumeYStart + volumeHeight);
       ctx.stroke();
 
-      // Time labels
+      // Time labels - 智能显示日期或时间
+      const date = new Date(data[i].time);
+      
+      // 判断是日线还是分时数据
+      const isIntraday = i > 0 && (() => {
+        const prevDate = new Date(data[i - 1].time);
+        const timeDiff = Math.abs(date.getTime() - prevDate.getTime());
+        return timeDiff < 24 * 60 * 60 * 1000; // 小于1天为分时
+      })();
+      
       ctx.fillStyle = '#6b7280';
       ctx.font = '12px system-ui';
       ctx.textAlign = 'center';
-      const timeStr = new Date(data[i].time).toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit'
-      });
+      
+      let timeStr: string;
+      if (i === 0 || !isIntraday) {
+        // 日线数据：显示月/日
+        timeStr = `${date.getMonth() + 1}/${date.getDate()}`;
+      } else {
+        // 分时数据：显示时:分
+        timeStr = date.toLocaleTimeString('zh-CN', {
+          hour: '2-digit',
+          minute: '2-digit'
+        });
+      }
+      
       ctx.fillText(timeStr, x, height - 20);
     }
 
@@ -140,6 +188,27 @@ export default function SimpleKLineChart({
         ctx.strokeStyle = '#3b82f6';
         ctx.lineWidth = 2;
         ctx.strokeRect(x - candleWidth/2 - 1, bodyTop - 1, candleWidth + 2, bodyHeight + 2);
+      }
+    });
+
+    // Draw volume bars
+    data.forEach((bar, index) => {
+      const x = xScale(index);
+      const barHeight = volumeHeight * (bar.volume / maxVolume);
+      const barY = volumeYStart + volumeHeight - barHeight;
+      
+      // 成交量柱子颜色：涨绿跌红，透明度0.6
+      const isUp = bar.close >= bar.open;
+      const color = isUp ? 'rgba(16, 185, 129, 0.6)' : 'rgba(239, 68, 68, 0.6)';
+      
+      ctx.fillStyle = color;
+      ctx.fillRect(x - candleWidth/2, barY, candleWidth, barHeight);
+      
+      // Highlight hovered volume bar
+      if (index === hoveredIndex) {
+        ctx.strokeStyle = '#3b82f6';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(x - candleWidth/2 - 1, barY - 1, candleWidth + 2, barHeight + 2);
       }
     });
 
@@ -248,7 +317,13 @@ export default function SimpleKLineChart({
             <div>最高: <span className="font-mono text-green-600">{hoveredData.high.toFixed(2)}</span></div>
             <div>最低: <span className="font-mono text-red-600">{hoveredData.low.toFixed(2)}</span></div>
             <div>收盘: <span className="font-mono">{hoveredData.close.toFixed(2)}</span></div>
-            <div>成交量: <span className="font-mono">{(hoveredData.volume / 1000000).toFixed(2)}M</span></div>
+            <div>成交量: <span className="font-mono">
+              {hoveredData.volume >= 1000000 
+                ? `${(hoveredData.volume / 1000000).toFixed(2)}M` 
+                : hoveredData.volume >= 1000 
+                  ? `${(hoveredData.volume / 1000).toFixed(2)}K`
+                  : hoveredData.volume.toFixed(0)}
+            </span></div>
             <div className={`font-semibold ${hoveredData.close >= hoveredData.open ? 'text-green-600' : 'text-red-600'}`}>
               {hoveredData.close >= hoveredData.open ? '▲' : '▼'}
               {((hoveredData.close - hoveredData.open) / hoveredData.open * 100).toFixed(2)}%

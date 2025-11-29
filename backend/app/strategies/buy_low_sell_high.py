@@ -313,3 +313,22 @@ class BuyLowSellHighStrategy:
             "sell_points": sell_points[-5:],  # 最近5个卖点
         }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

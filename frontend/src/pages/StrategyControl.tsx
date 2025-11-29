@@ -32,6 +32,12 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
+import AddIcon from '@mui/icons-material/Add';
+import DeleteIcon from '@mui/icons-material/Delete';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
 
 interface Strategy {
   id: string;
@@ -72,6 +78,13 @@ export default function StrategyControlPage() {
   const [editDialog, setEditDialog] = useState<{ open: boolean; strategy: Strategy | null }>({
     open: false,
     strategy: null,
+  });
+  const [createDialog, setCreateDialog] = useState(false);
+  const [newStrategy, setNewStrategy] = useState({
+    name: '',
+    description: '',
+    symbols: '',
+    strategy_type: 'ma_crossover',
   });
   const [wsConnected, setWsConnected] = useState(false);
 
@@ -173,6 +186,69 @@ export default function StrategyControlPage() {
       }
     } catch (e) {
       console.error('Error updating strategy:', e);
+    }
+  };
+
+  // Create new strategy
+  const createStrategy = async () => {
+    try {
+      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const symbols = newStrategy.symbols
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      const response = await fetch(`${base}/strategies/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newStrategy.name,
+          description: newStrategy.description,
+          symbols: symbols,
+          strategy_type: newStrategy.strategy_type,
+        }),
+      });
+
+      if (response.ok) {
+        await loadStrategies();
+        setCreateDialog(false);
+        setNewStrategy({
+          name: '',
+          description: '',
+          symbols: '',
+          strategy_type: 'ma_crossover',
+        });
+      } else {
+        const data = await response.json();
+        setError(data.detail || 'Failed to create strategy');
+      }
+    } catch (e) {
+      console.error('Error creating strategy:', e);
+      setError('Failed to create strategy');
+    }
+  };
+
+  // Delete strategy
+  const deleteStrategy = async (strategyId: string) => {
+    if (!window.confirm('确定要删除这个策略吗？')) {
+      return;
+    }
+
+    try {
+      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const response = await fetch(`${base}/strategies/${strategyId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await loadStrategies();
+      } else {
+        const data = await response.json();
+        setError(data.detail || 'Failed to delete strategy');
+      }
+    } catch (e) {
+      console.error('Error deleting strategy:', e);
+      setError('Failed to delete strategy');
     }
   };
 
@@ -298,6 +374,14 @@ export default function StrategyControlPage() {
                   color: 'white',
                 }}
               />
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={() => setCreateDialog(true)}
+                sx={{ bgcolor: 'rgba(255,255,255,0.2)', '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' } }}
+              >
+                新建策略
+              </Button>
               <IconButton color="inherit" onClick={reloadStrategies}>
                 <RefreshIcon />
               </IconButton>
@@ -360,7 +444,16 @@ export default function StrategyControlPage() {
                   </Typography>
                 )}
 
-                <Box display="flex" justifyContent="end" mt={2}>
+                <Box display="flex" justifyContent="space-between" mt={2}>
+                  <IconButton
+                    size="small"
+                    color="error"
+                    onClick={() => deleteStrategy(strategy.id)}
+                    disabled={strategy.enabled}
+                    title={strategy.enabled ? '请先禁用策略' : '删除策略'}
+                  >
+                    <DeleteIcon fontSize="small" />
+                  </IconButton>
                   <IconButton
                     size="small"
                     onClick={() => setEditDialog({ open: true, strategy })}
@@ -450,6 +543,64 @@ export default function StrategyControlPage() {
           </Table>
         </TableContainer>
       )}
+
+      {/* Create Strategy Dialog */}
+      <Dialog open={createDialog} onClose={() => setCreateDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>创建新策略</DialogTitle>
+        <DialogContent>
+          <Box display="flex" flexDirection="column" gap={2} mt={2}>
+            <TextField
+              label="策略名称"
+              value={newStrategy.name}
+              onChange={(e) => setNewStrategy({ ...newStrategy, name: e.target.value })}
+              fullWidth
+              required
+              placeholder="例如：我的均线策略"
+            />
+            <TextField
+              label="策略描述"
+              value={newStrategy.description}
+              onChange={(e) => setNewStrategy({ ...newStrategy, description: e.target.value })}
+              fullWidth
+              multiline
+              rows={2}
+              placeholder="描述策略的作用和特点"
+            />
+            <FormControl fullWidth>
+              <InputLabel>策略类型</InputLabel>
+              <Select
+                value={newStrategy.strategy_type}
+                onChange={(e) => setNewStrategy({ ...newStrategy, strategy_type: e.target.value })}
+                label="策略类型"
+              >
+                <MenuItem value="ma_crossover">均线交叉策略</MenuItem>
+                <MenuItem value="rsi_oversold">RSI 超卖反弹策略</MenuItem>
+                <MenuItem value="breakout">突破策略</MenuItem>
+                <MenuItem value="bollinger_bands">布林带策略</MenuItem>
+                <MenuItem value="macd">MACD 背离策略</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="监控标的"
+              value={newStrategy.symbols}
+              onChange={(e) => setNewStrategy({ ...newStrategy, symbols: e.target.value })}
+              fullWidth
+              placeholder="例如：700.HK, AAPL.US"
+              helperText="用逗号分隔多个标的代码"
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateDialog(false)}>取消</Button>
+          <Button
+            onClick={createStrategy}
+            variant="contained"
+            disabled={!newStrategy.name}
+          >
+            创建
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Edit Strategy Dialog */}
       <Dialog

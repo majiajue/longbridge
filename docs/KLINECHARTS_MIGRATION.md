@@ -389,3 +389,22 @@ https://klinecharts.com/zh-CN/sample/shape.html
 
 访问：`http://localhost:5173` → **"持仓K线 📊"**
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

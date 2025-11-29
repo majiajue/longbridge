@@ -266,7 +266,7 @@ async def enable_all_monitoring() -> Dict[str, str]:
         monitor = get_position_monitor()
 
         for symbol, config in configs.items():
-            config.monitoring_status = MonitoringStatus.ACTIVE
+            config.monitoring_status = MonitoringStatus.ENABLED
             save_position_monitoring_config(config.model_dump())
             await monitor.update_position_config(symbol, config)
 

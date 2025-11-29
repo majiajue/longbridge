@@ -360,6 +360,246 @@ async def simulate_trading_signals(symbol: str, days: int = 7) -> Dict[str, Any]
         logger.error(f"Error simulating trading signals: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.post("/")
+async def create_strategy(
+    name: str,
+    description: str = "",
+    symbols: List[str] = [],
+    strategy_type: str = "ma_crossover"
+) -> Dict[str, Any]:
+    """Create a new strategy"""
+    try:
+        engine = get_strategy_engine()
+        
+        # Generate a unique strategy ID
+        import uuid
+        strategy_id = f"{strategy_type}_{uuid.uuid4().hex[:8]}"
+        
+        # Define default configurations for different strategy types
+        strategy_templates = {
+            "ma_crossover": {
+                "conditions": {
+                    "buy": [
+                        {
+                            "type": "ma_crossover",
+                            "params": {
+                                "short_period": 5,
+                                "long_period": 20,
+                                "direction": "golden_cross"
+                            }
+                        }
+                    ],
+                    "sell": [
+                        {
+                            "type": "ma_crossover",
+                            "params": {
+                                "short_period": 5,
+                                "long_period": 20,
+                                "direction": "death_cross"
+                            }
+                        }
+                    ]
+                },
+                "risk_management": {
+                    "stop_loss": 0.05,
+                    "take_profit": 0.15,
+                    "position_size": 0.1,
+                    "max_positions": 3
+                }
+            },
+            "rsi_oversold": {
+                "conditions": {
+                    "buy": [
+                        {
+                            "type": "rsi",
+                            "params": {
+                                "period": 14,
+                                "oversold": 30,
+                                "operator": "less_than"
+                            }
+                        }
+                    ],
+                    "sell": [
+                        {
+                            "type": "rsi",
+                            "params": {
+                                "period": 14,
+                                "overbought": 70,
+                                "operator": "greater_than"
+                            }
+                        }
+                    ]
+                },
+                "risk_management": {
+                    "stop_loss": 0.03,
+                    "take_profit": 0.08,
+                    "position_size": 0.15,
+                    "max_positions": 2
+                }
+            },
+            "breakout": {
+                "conditions": {
+                    "buy": [
+                        {
+                            "type": "price_breakout",
+                            "params": {
+                                "period": 20,
+                                "breakout_type": "resistance",
+                                "confirmation_bars": 2
+                            }
+                        }
+                    ],
+                    "sell": [
+                        {
+                            "type": "price_breakout",
+                            "params": {
+                                "period": 20,
+                                "breakout_type": "support",
+                                "confirmation_bars": 1
+                            }
+                        }
+                    ]
+                },
+                "risk_management": {
+                    "stop_loss": 0.04,
+                    "take_profit": 0.12,
+                    "position_size": 0.2,
+                    "max_positions": 2
+                }
+            },
+            "bollinger_bands": {
+                "conditions": {
+                    "buy": [
+                        {
+                            "type": "bollinger_bands",
+                            "params": {
+                                "period": 20,
+                                "std_dev": 2,
+                                "band": "lower",
+                                "operator": "touch"
+                            }
+                        }
+                    ],
+                    "sell": [
+                        {
+                            "type": "bollinger_bands",
+                            "params": {
+                                "period": 20,
+                                "std_dev": 2,
+                                "band": "upper",
+                                "operator": "touch"
+                            }
+                        }
+                    ]
+                },
+                "risk_management": {
+                    "stop_loss": 0.025,
+                    "take_profit": 0.06,
+                    "position_size": 0.25,
+                    "max_positions": 2
+                }
+            },
+            "macd": {
+                "conditions": {
+                    "buy": [
+                        {
+                            "type": "macd",
+                            "params": {
+                                "fast_period": 12,
+                                "slow_period": 26,
+                                "signal_period": 9,
+                                "condition": "bullish_divergence"
+                            }
+                        }
+                    ],
+                    "sell": [
+                        {
+                            "type": "macd",
+                            "params": {
+                                "fast_period": 12,
+                                "slow_period": 26,
+                                "signal_period": 9,
+                                "condition": "bearish_divergence"
+                            }
+                        }
+                    ]
+                },
+                "risk_management": {
+                    "stop_loss": 0.04,
+                    "take_profit": 0.10,
+                    "position_size": 0.15,
+                    "max_positions": 3
+                }
+            }
+        }
+        
+        # Get template or use default
+        template = strategy_templates.get(strategy_type, strategy_templates["ma_crossover"])
+        
+        # Create new strategy
+        new_strategy = {
+            "id": strategy_id,
+            "name": name,
+            "enabled": False,  # New strategies start disabled
+            "description": description,
+            "symbols": symbols,
+            "use_optimal_signals": True,
+            "conditions": template["conditions"],
+            "risk_management": template["risk_management"]
+        }
+        
+        # Add to engine
+        engine.strategies[strategy_id] = new_strategy
+        engine.strategy_status[strategy_id] = StrategyStatus.IDLE
+        
+        # Save to config file
+        engine.save_strategies()
+        
+        logger.info(f"Created new strategy: {strategy_id} - {name}")
+        
+        return {
+            "message": f"Strategy '{name}' created successfully",
+            "strategy_id": strategy_id,
+            "strategy": new_strategy
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating strategy: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.delete("/{strategy_id}")
+async def delete_strategy(strategy_id: str) -> Dict[str, str]:
+    """Delete a strategy"""
+    try:
+        engine = get_strategy_engine()
+        
+        if strategy_id not in engine.strategies:
+            raise HTTPException(status_code=404, detail="Strategy not found")
+        
+        # Don't allow deleting enabled strategies
+        if engine.strategies[strategy_id].get('enabled', False):
+            raise HTTPException(status_code=400, detail="Cannot delete an enabled strategy. Please disable it first.")
+        
+        # Remove strategy
+        del engine.strategies[strategy_id]
+        if strategy_id in engine.strategy_status:
+            del engine.strategy_status[strategy_id]
+        if strategy_id in engine.last_trade_time:
+            del engine.last_trade_time[strategy_id]
+        
+        # Save changes
+        engine.save_strategies()
+        
+        logger.info(f"Deleted strategy: {strategy_id}")
+        
+        return {"message": f"Strategy {strategy_id} deleted successfully"}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting strategy {strategy_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.post("/reload")
 async def reload_strategies() -> Dict[str, str]:
     """Reload strategies from configuration file"""

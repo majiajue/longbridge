@@ -2,60 +2,9 @@
 > longbridge-quant-frontend@0.1.0 dev
 > vite
 
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
 
-  VITE v5.4.20  ready in 605 ms
+  VITE v5.4.20  ready in 997 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: use --host to expose
-9:39:26 PM [vite] hmr update /src/index.css, /src/pages/Settings.tsx, /src/pages/RealtimeKLine.tsx, /src/pages/Realtime.tsx, /src/pages/PositionMonitoring.tsx
-9:40:07 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:40:12 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:40:19 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:40:30 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:40:31 PM [vite] ✨ new dependencies optimized: @mui/icons-material/ErrorOutline, @mui/icons-material/HelpOutline, @mui/icons-material/Launch, @mui/icons-material/ContentCopy
-9:40:31 PM [vite] ✨ optimized dependencies changed. reloading
-9:43:31 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:43:31 PM [vite] hmr update /src/index.css, /src/pages/Settings.tsx, /src/pages/RealtimeKLine.tsx, /src/pages/Realtime.tsx, /src/pages/PositionMonitoring.tsx, /src/components/ErrorDialog.tsx
-9:43:31 PM [vite] hmr update /src/components/ErrorDialog.tsx, /src/index.css
-9:43:37 PM [vite] hmr update /src/components/ErrorDialog.tsx, /src/index.css
-9:43:37 PM [vite] hmr update /src/index.css, /src/pages/Settings.tsx, /src/pages/RealtimeKLine.tsx, /src/pages/Realtime.tsx, /src/pages/PositionMonitoring.tsx, /src/components/ErrorDialog.tsx
-9:43:37 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:43:38 PM [vite] hmr update /src/pages/Settings.tsx, /src/index.css
-9:43:38 PM [vite] hmr update /src/components/ErrorDialog.tsx, /src/index.css
-9:43:38 PM [vite] hmr update /src/index.css, /src/pages/Settings.tsx, /src/pages/RealtimeKLine.tsx, /src/pages/Realtime.tsx, /src/pages/PositionMonitoring.tsx, /src/components/ErrorDialog.tsx
-9:51:04 PM [vite] hmr update /src/App.tsx, /src/index.css
-9:51:16 PM [vite] hmr update /src/App.tsx, /src/index.css
-9:51:29 PM [vite] hmr update /src/App.tsx, /src/index.css
-9:51:29 PM [vite] hmr update /src/App.tsx, /src/index.css
-9:51:31 PM [vite] ✨ new dependencies optimized: @mui/icons-material/ExpandMore, @mui/icons-material/ShowChart, @mui/icons-material/Timeline
-9:51:31 PM [vite] ✨ optimized dependencies changed. reloading
-9:55:49 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-9:55:49 PM [vite] hmr update /src/App.tsx, /src/index.css
-9:55:49 PM [vite] hmr update /src/components/RealTimeKLineChart.tsx, /src/index.css
-10:02:23 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:02:33 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:02:41 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:02:49 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:02:57 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:06:27 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:14:36 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:15:33 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:23:07 PM [vite] hmr update /src/pages/StrategyWatch.tsx, /src/index.css
-10:53:25 PM [vite] hmr update /src/App.tsx, /src/index.css
-10:53:35 PM [vite] hmr update /src/App.tsx, /src/index.css
-10:53:46 PM [vite] hmr update /src/App.tsx, /src/index.css
-10:53:48 PM [vite] ✨ new dependencies optimized: lightweight-charts
-10:53:48 PM [vite] ✨ optimized dependencies changed. reloading
-10:58:39 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-10:58:50 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:01:16 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:01:19 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:01:58 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:02:06 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:02:06 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:02:15 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:02:31 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:02:49 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:02:50 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:08:04 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css
-11:10:07 PM [vite] hmr update /src/pages/PositionKLines.tsx, /src/index.css

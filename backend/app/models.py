@@ -19,6 +19,16 @@ class CredentialResponse(BaseModel):
     LONGPORT_ACCESS_TOKEN: Optional[str] = None
 
 
+class AICredentialPayload(BaseModel):
+    DEEPSEEK_API_KEY: str = Field(..., description="DeepSeek API Key")
+    TAVILY_API_KEY: Optional[str] = Field(None, description="Tavily API Key (可选)")
+
+
+class AICredentialResponse(BaseModel):
+    DEEPSEEK_API_KEY: Optional[str] = None
+    TAVILY_API_KEY: Optional[str] = None
+
+
 class SymbolPayload(BaseModel):
     symbols: List[str] = Field(default_factory=list)
 
@@ -150,16 +160,16 @@ class MonitoringStatus(str, Enum):
 
 
 class StrategyMode(str, Enum):
-    CONSERVATIVE = "conservative"
-    BALANCED = "balanced"
-    AGGRESSIVE = "aggressive"
-    CUSTOM = "custom"
+    AUTO = "auto"              # 自动执行交易
+    ALERT_ONLY = "alert_only"  # 仅发送告警
+    DISABLED = "disabled"      # 禁用策略
+    BALANCED = "balanced"      # 平衡模式（向后兼容）
 
 
 class PositionMonitoringConfig(BaseModel):
     symbol: str
     monitoring_status: MonitoringStatus = MonitoringStatus.ENABLED
-    strategy_mode: StrategyMode = StrategyMode.BALANCED
+    strategy_mode: StrategyMode = StrategyMode.ALERT_ONLY  # 默认仅告警，安全优先
     enabled_strategies: List[str] = Field(default_factory=list)
     max_position_ratio: float = Field(default=0.1, ge=0.01, le=1.0)
     stop_loss_ratio: float = Field(default=0.05, ge=0.01, le=0.3)

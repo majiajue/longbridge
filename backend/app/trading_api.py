@@ -84,6 +84,26 @@ class LongbridgeTradingAPI:
             logger.error(f"Error loading credentials: {e}")
             return False
 
+    def _get_friendly_error_message(self, error_str: str) -> str:
+        """Convert technical error messages to user-friendly messages"""
+        error_lower = error_str.lower()
+        
+        # Check for common error patterns
+        if "timeout" in error_lower or "request timeout" in error_lower:
+            return "⏱️ Longbridge API 请求超时（可能原因：网络延迟、服务器繁忙或市场已闭市）"
+        elif "network" in error_lower or "connection" in error_lower:
+            return "🌐 网络连接失败，请检查网络连接"
+        elif "market closed" in error_lower or "not trading" in error_lower:
+            return "🔒 市场已闭市，无法交易"
+        elif "insufficient" in error_lower or "balance" in error_lower:
+            return "💰 账户余额不足"
+        elif "invalid symbol" in error_lower or "symbol not found" in error_lower:
+            return "❌ 无效的股票代码"
+        elif "permission" in error_lower or "unauthorized" in error_lower:
+            return "🔑 API 权限不足，请检查账户权限"
+        else:
+            return f"❌ 交易失败: {error_str}"
+    
     def _get_trade_context(self):
         """Get TradeContext instance"""
         try:
@@ -105,78 +125,115 @@ class LongbridgeTradingAPI:
         return TradeContext(config)
 
     async def place_order(self, order_request: OrderRequest) -> OrderResponse:
-        """Place a trading order"""
-        try:
-            ctx = self._get_trade_context()
-
-            # Import required enums from longport
-            from longport.openapi import OrderSide as LBOrderSide, OrderType as LBOrderType
-
-            # Convert our enums to longport enums
-            lb_side = LBOrderSide.Buy if order_request.side == OrderSide.BUY else LBOrderSide.Sell
-
-            # Map order types
-            order_type_map = {
-                OrderType.MARKET: LBOrderType.MO,
-                OrderType.LIMIT: LBOrderType.LO,
-                OrderType.STOP: LBOrderType.SLO,
-                OrderType.STOP_LIMIT: LBOrderType.SLO,
-            }
-            lb_order_type = order_type_map.get(order_request.order_type, LBOrderType.MO)
-
+        """Place a trading order with retry mechanism"""
+        import time
+        from datetime import datetime
+        
+        max_retries = 3
+        retry_delay = 2  # seconds
+        
+        for attempt in range(max_retries):
             try:
-                # Submit the order
-                response = ctx.submit_order(
-                    symbol=order_request.symbol,
-                    order_type=lb_order_type,
-                    side=lb_side,
-                    submitted_quantity=order_request.quantity,
-                    submitted_price=order_request.price,
-                    time_in_force=order_request.time_in_force,
-                    remark=order_request.remark or ""
-                )
+                logger.info(f"🔄 Attempting to place order (attempt {attempt + 1}/{max_retries})...")
+                
+                # Create TradeContext with retry
+                ctx = None
+                try:
+                    ctx = self._get_trade_context()
+                except Exception as ctx_error:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"⚠️  Failed to create TradeContext: {ctx_error}, retrying in {retry_delay}s...")
+                        time.sleep(retry_delay)
+                        continue
+                    else:
+                        # Last attempt failed
+                        error_msg = self._get_friendly_error_message(str(ctx_error))
+                        logger.error(f"❌ All retries exhausted for TradeContext: {error_msg}")
+                        raise LongbridgeAPIError(error_msg)
 
-                # Convert response to our format
-                order_response = OrderResponse(
-                    order_id=response.order_id,
-                    status=OrderStatus.SUBMITTED,  # Initial status
-                    symbol=order_request.symbol,
-                    side=order_request.side,
-                    quantity=order_request.quantity,
-                    filled_quantity=0,
-                    price=order_request.price,
-                    filled_price=None,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now()
-                )
+                # Import required enums from longport
+                from longport.openapi import OrderSide as LBOrderSide, OrderType as LBOrderType
 
-                logger.info(f"Order placed successfully: {response.order_id}")
-                return order_response
+                # Convert our enums to longport enums
+                lb_side = LBOrderSide.Buy if order_request.side == OrderSide.BUY else LBOrderSide.Sell
 
+                # Map order types
+                order_type_map = {
+                    OrderType.MARKET: LBOrderType.MO,
+                    OrderType.LIMIT: LBOrderType.LO,
+                    OrderType.STOP: LBOrderType.SLO,
+                    OrderType.STOP_LIMIT: LBOrderType.SLO,
+                }
+                lb_order_type = order_type_map.get(order_request.order_type, LBOrderType.MO)
+
+                try:
+                    # Submit the order
+                    logger.info(f"📤 Submitting order: {order_request.symbol} {order_request.side.value} x{order_request.quantity}")
+                    response = ctx.submit_order(
+                        symbol=order_request.symbol,
+                        order_type=lb_order_type,
+                        side=lb_side,
+                        submitted_quantity=order_request.quantity,
+                        submitted_price=order_request.price,
+                        time_in_force=order_request.time_in_force,
+                        remark=order_request.remark or ""
+                    )
+
+                    # Convert response to our format
+                    order_response = OrderResponse(
+                        order_id=response.order_id,
+                        status=OrderStatus.SUBMITTED,  # Initial status
+                        symbol=order_request.symbol,
+                        side=order_request.side,
+                        quantity=order_request.quantity,
+                        filled_quantity=0,
+                        price=order_request.price,
+                        filled_price=None,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now()
+                    )
+
+                    logger.info(f"✅ Order placed successfully: {response.order_id}")
+                    return order_response
+
+                except Exception as submit_error:
+                    error_msg = self._get_friendly_error_message(str(submit_error))
+                    logger.error(f"❌ Failed to submit order: {error_msg}")
+                    
+                    # Return rejected order response instead of raising
+                    return OrderResponse(
+                        order_id="",
+                        status=OrderStatus.REJECTED,
+                        symbol=order_request.symbol,
+                        side=order_request.side,
+                        quantity=order_request.quantity,
+                        filled_quantity=0,
+                        price=order_request.price,
+                        filled_price=None,
+                        created_at=datetime.now(),
+                        updated_at=datetime.now(),
+                        error_message=error_msg
+                    )
+                finally:
+                    try:
+                        if ctx:
+                            ctx.close()
+                    except:
+                        pass
+                    
+            except LongbridgeAPIError:
+                raise  # Re-raise LongbridgeAPIError
             except Exception as e:
-                logger.error(f"Failed to place order: {e}")
-                return OrderResponse(
-                    order_id="",
-                    status=OrderStatus.REJECTED,
-                    symbol=order_request.symbol,
-                    side=order_request.side,
-                    quantity=order_request.quantity,
-                    filled_quantity=0,
-                    price=order_request.price,
-                    filled_price=None,
-                    created_at=datetime.now(),
-                    updated_at=datetime.now(),
-                    error_message=str(e)
-                )
-
-        except Exception as e:
-            logger.error(f"Error in place_order: {e}")
-            raise LongbridgeAPIError(f"Failed to place order: {e}")
-        finally:
-            try:
-                ctx.close()
-            except:
-                pass
+                if attempt < max_retries - 1:
+                    logger.warning(f"⚠️  Attempt {attempt + 1} failed: {e}, retrying in {retry_delay}s...")
+                    time.sleep(retry_delay)
+                else:
+                    error_msg = self._get_friendly_error_message(str(e))
+                    logger.error(f"❌ All retries exhausted: {error_msg}")
+                    raise LongbridgeAPIError(error_msg)
+        
+        # Should not reach here, but just in case
+        raise LongbridgeAPIError("Failed to place order after all retries")
 
     async def cancel_order(self, order_id: str) -> bool:
         """Cancel an existing order"""

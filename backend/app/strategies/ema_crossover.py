@@ -389,3 +389,22 @@ class EMACrossoverStrategy:
             "gap_percent": gap * 100
         }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

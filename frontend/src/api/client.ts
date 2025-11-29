@@ -4,6 +4,11 @@ export type Credentials = {
   LONGPORT_ACCESS_TOKEN: string;
 };
 
+export type AICredentials = {
+  DEEPSEEK_API_KEY: string;
+  TAVILY_API_KEY?: string;  // ⬆️ 新增Tavily搜索引擎API Key（可选）
+};
+
 export type SymbolsResponse = {
   symbols: string[];
 };
@@ -202,6 +207,20 @@ export async function fetchCredentials(): Promise<Partial<Credentials>> {
 
 export async function updateCredentials(payload: Credentials): Promise<void> {
   const res = await fetch(`${API_BASE}/settings/credentials`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  await handleResponse<void>(res);
+}
+
+export async function fetchAICredentials(): Promise<Partial<AICredentials>> {
+  const res = await fetch(`${API_BASE}/settings/ai-credentials`);
+  return handleResponse(res);
+}
+
+export async function updateAICredentials(payload: AICredentials): Promise<void> {
+  const res = await fetch(`${API_BASE}/settings/ai-credentials`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

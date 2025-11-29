@@ -4,8 +4,9 @@ import logging
 
 import asyncio
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .routers import portfolio as portfolio_router
@@ -16,8 +17,13 @@ from .routers import monitoring as monitoring_router
 from .routers import notifications as notifications_router
 from .routers import signal_analysis as signal_analysis_router
 from .routers import strategies_advanced as strategies_advanced_router
+from .routers import position_manager as position_manager_router
+from .routers import ai_trading as ai_trading_router
+from .routers import stock_picker as stock_picker_router
+from .routers import ai_config as ai_config_router  # ⬆️ 新增AI配置路由
 from .streaming import quote_stream_manager
 from .position_monitor import get_position_monitor
+from .ai_trading_engine import get_ai_trading_engine
 
 
 app = FastAPI(title="Longbridge Quant Backend", version="0.1.0")
@@ -32,6 +38,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 全局异常处理器，确保所有错误响应都包含 CORS 头
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logger.error(f"全局异常: {type(exc).__name__}: {exc}", exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc)},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
+
 app.include_router(settings_router.router)
 app.include_router(quotes_router.router)
 app.include_router(portfolio_router.router)
@@ -40,7 +61,25 @@ app.include_router(strategies_advanced_router.router)
 app.include_router(monitoring_router.router)
 app.include_router(notifications_router.router)
 app.include_router(signal_analysis_router.router)
-logging.basicConfig(level=logging.INFO)
+app.include_router(position_manager_router.router)
+app.include_router(ai_trading_router.router)
+app.include_router(stock_picker_router.router)
+app.include_router(ai_config_router.router)  # ⬆️ 注册AI配置路由
+
+# 配置日志 - 确保所有模块的日志都能输出
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(levelname)s:%(name)s:%(message)s'
+)
+
+# 确保 stock_picker 模块的日志也输出到控制台
+stock_picker_logger = logging.getLogger('app.stock_picker')
+stock_picker_logger.setLevel(logging.INFO)
+if not stock_picker_logger.handlers:
+    handler = logging.StreamHandler()
+    handler.setFormatter(logging.Formatter('%(levelname)s:%(name)s:%(message)s'))
+    stock_picker_logger.addHandler(handler)
+
 logger = logging.getLogger(__name__)
 
 
@@ -136,6 +175,12 @@ async def on_startup() -> None:
     # Auto-sync position historical data
     asyncio.create_task(_auto_sync_position_data())
     logger.info("startup: auto-sync task scheduled")
+    
+    # Initialize AI Trading Engine (if enabled)
+    ai_engine = get_ai_trading_engine()
+    # Note: 引擎会根据配置决定是否启动
+    # 用户需要通过 API 或配置文件启用
+    logger.info("startup: AI trading engine initialized")
 
 
 
@@ -146,11 +191,59 @@ async def on_shutdown() -> None:
     # Stop position monitor
     monitor = get_position_monitor()
     await monitor.stop_monitoring()
+    
+    # Stop AI trading engine
+    ai_engine = get_ai_trading_engine()
+    await ai_engine.stop()
+    logger.info("shutdown: AI trading engine stopped")
 
 
 @app.get("/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/admin/reset-ai-table")
+def reset_ai_analysis_table():
+    """临时端点：重置 ai_analysis_log 表"""
+    from .db import get_connection
+    try:
+        with get_connection() as conn:
+            conn.execute("DROP TABLE IF EXISTS quant.ai_analysis_log")
+            conn.execute("DROP SEQUENCE IF EXISTS quant.ai_analysis_log_seq")
+            logger.info("✅ Dropped ai_analysis_log table and sequence")
+            
+            # 手动创建表
+            conn.execute("""
+                CREATE TABLE quant.ai_analysis_log (
+                    id INTEGER PRIMARY KEY,
+                    symbol TEXT NOT NULL,
+                    analysis_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    kline_snapshot TEXT,
+                    indicators TEXT,
+                    current_price DOUBLE,
+                    ai_model TEXT,
+                    ai_prompt TEXT,
+                    ai_response TEXT,
+                    action TEXT,
+                    confidence DOUBLE,
+                    reasoning TEXT,
+                    entry_price_min DOUBLE,
+                    entry_price_max DOUBLE,
+                    stop_loss_price DOUBLE,
+                    take_profit_price DOUBLE,
+                    risk_level TEXT,
+                    triggered_trade BOOLEAN DEFAULT false,
+                    trade_id INTEGER,
+                    skip_reason TEXT
+                )
+            """)
+            logger.info("✅ Created ai_analysis_log table with auto-increment ID")
+            
+        return {"status": "ok", "message": "ai_analysis_log table reset successfully"}
+    except Exception as e:
+        logger.error(f"Failed to reset table: {e}")
+        return {"status": "error", "message": str(e)}
 
 
 @app.websocket("/ws/quotes")
@@ -184,3 +277,46 @@ async def quotes_websocket(websocket: WebSocket) -> None:
         logger.error(f"WebSocket error: {e}")
     finally:
         quote_stream_manager.remove_listener(queue)
+
+
+@app.websocket("/ws/ai-trading")
+async def ai_trading_websocket(websocket: WebSocket) -> None:
+    """AI 交易实时推送 WebSocket"""
+    import json
+    from datetime import datetime
+    from .ai_trading_engine import get_ai_trading_engine
+
+    def json_serializer(obj):
+        """JSON serializer for objects not serializable by default json code"""
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        if hasattr(obj, 'name'):
+            return obj.name
+        if hasattr(obj, 'value'):
+            return obj.value
+        return str(obj)
+
+    await websocket.accept()
+    engine = get_ai_trading_engine()
+    queue = engine.add_listener()
+    
+    # 发送欢迎消息
+    welcome_msg = {
+        'type': 'connected',
+        'message': 'Connected to AI Trading Engine',
+        'running': engine.is_running(),
+        'timestamp': datetime.now().isoformat()
+    }
+    await websocket.send_text(json.dumps(welcome_msg, default=json_serializer))
+    
+    try:
+        while True:
+            payload = await queue.get()
+            json_str = json.dumps(payload, default=json_serializer)
+            await websocket.send_text(json_str)
+    except WebSocketDisconnect:
+        logger.info("📡 AI trading WebSocket disconnected")
+    except Exception as e:
+        logger.error(f"AI trading WebSocket error: {e}")
+    finally:
+        engine.remove_listener(queue)
