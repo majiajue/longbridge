@@ -16,3 +16,6 @@ data/
 # Env files
 *.env
 backend/data/encryption.key
+logs/backend.log
+logs/frontend.log
+logs/backend.log
