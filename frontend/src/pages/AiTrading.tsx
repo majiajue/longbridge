@@ -1091,7 +1091,8 @@ export default function AiTradingPage() {
                       try {
                         const response = await fetch(`${API_BASE}/portfolio/positions`);
                         if (response.ok) {
-                          const positions = await response.json();
+                          const data = await response.json();
+                          const positions = data.positions || [];
                           const positionSymbols = positions.map((p: any) => p.symbol);
                           if (positionSymbols.length > 0) {
                             // 添加到输入框

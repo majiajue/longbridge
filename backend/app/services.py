@@ -337,6 +337,13 @@ def get_positions() -> List[Dict[str, object]]:
 
             direction = "short" if raw_cost_price < 0 else "long"
             entry_price = abs(raw_cost_price)
+            
+            # 计算成本价值、市值、盈亏等字段
+            cost_value = entry_price * qty
+            # 暂时使用成本价作为市值，后续会通过实时行情更新
+            market_value = cost_value
+            pnl = 0.0
+            pnl_percent = 0.0
 
             positions.append(
                 {
@@ -348,6 +355,10 @@ def get_positions() -> List[Dict[str, object]]:
                     "available_quantity": available,
                     "avg_price": entry_price,
                     "raw_avg_price": raw_cost_price,
+                    "cost_value": cost_value,
+                    "market_value": market_value,
+                    "pnl": pnl,
+                    "pnl_percent": pnl_percent,
                     "direction": direction,
                     "account_channel": account_channel,
                 }
