@@ -6,8 +6,10 @@ import PositionKLinesPage from "./pages/PositionKLines";
 import SmartPositionPage from "./pages/SmartPosition";
 import AiTradingPage from "./pages/AiTrading";
 import StockPickerPage from "./pages/StockPicker";
+import SectorRotationPage from "./pages/SectorRotation";
+import DashboardPage from "./pages/Dashboard";
 
-type TabType = "settings" | "monitoring" | "strategy-watch" | "position-klines" | "smart-position" | "ai-trading" | "stock-picker";
+type TabType = "dashboard" | "settings" | "monitoring" | "strategy-watch" | "position-klines" | "smart-position" | "ai-trading" | "stock-picker" | "sector-rotation";
 
 interface TabItem {
   id: TabType;
@@ -16,9 +18,11 @@ interface TabItem {
 }
 
 const tabs: TabItem[] = [
+  { id: "dashboard", label: "工作台", icon: "🏠" },
   { id: "settings", label: "基础配置", icon: "⚙️" },
   { id: "ai-trading", label: "AI 交易", icon: "🤖" },
   { id: "stock-picker", label: "智能选股", icon: "🎯" },
+  { id: "sector-rotation", label: "板块轮动", icon: "🔥" },
   { id: "smart-position", label: "智能仓位", icon: "🎲" },
   { id: "position-klines", label: "持仓K线", icon: "📊" },
   { id: "strategy-watch", label: "策略盯盘", icon: "🔍" },
@@ -26,7 +30,7 @@ const tabs: TabItem[] = [
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<TabType>("settings");
+  const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -47,6 +51,53 @@ export default function App() {
       document.documentElement.classList.remove("dark");
     }
   };
+
+  // Dashboard 有自己的布局，直接返回
+  if (activeTab === "dashboard") {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 transition-colors duration-300">
+        {/* 简化的导航栏 */}
+        <div className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-20 shadow-sm">
+          <div className="max-w-full px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center justify-between h-12">
+              <div className="flex items-center space-x-4">
+                <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">LB</span>
+                </div>
+                <span className="text-lg font-bold text-gray-900 dark:text-white">Longbridge</span>
+              </div>
+              <div className="flex space-x-2 overflow-x-auto">
+                {tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`
+                      px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 whitespace-nowrap
+                      ${
+                        activeTab === tab.id
+                          ? "bg-primary-100 text-primary-700 dark:bg-primary-900 dark:text-primary-300"
+                          : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                      }
+                    `}
+                  >
+                    <span className="mr-1">{tab.icon}</span>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={toggleDarkMode}
+                className="p-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200"
+              >
+                {darkMode ? "🌙" : "☀️"}
+              </button>
+            </div>
+          </div>
+        </div>
+        <DashboardPage />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 transition-colors duration-300">
@@ -112,6 +163,7 @@ export default function App() {
           {activeTab === "settings" && <SettingsPage />}
           {activeTab === "ai-trading" && <AiTradingPage />}
           {activeTab === "stock-picker" && <StockPickerPage />}
+          {activeTab === "sector-rotation" && <SectorRotationPage />}
           {activeTab === "smart-position" && <SmartPositionPage />}
           {activeTab === "position-klines" && <PositionKLinesPage />}
           {activeTab === "strategy-watch" && <StrategyWatchPage />}

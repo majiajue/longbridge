@@ -147,17 +147,35 @@ def _run_migrations(conn: DuckDBPyConnection) -> None:
     conn.execute(_STOCK_PICKER_POOLS_TABLE_SQL)
     conn.execute(_STOCK_PICKER_ANALYSIS_TABLE_SQL)
     conn.execute(_STOCK_PICKER_CONFIG_TABLE_SQL)
-    
+
+    # 板块轮动表
+    conn.execute(_SECTOR_ETFS_TABLE_SQL)
+    conn.execute(_SECTOR_PERFORMANCE_TABLE_SQL)
+    conn.execute(_SECTOR_STOCKS_TABLE_SQL)
+    conn.execute(_SECTOR_ROTATION_CONFIG_TABLE_SQL)
+
+    # 市场快照和因子分析表
+    conn.execute(_MARKET_SNAPSHOT_TABLE_SQL)
+    conn.execute(_FACTOR_SCORES_TABLE_SQL)
+    conn.execute(_FACTOR_ROTATION_SIGNALS_TABLE_SQL)
+
     _ensure_column(conn, "ticks", "sequence", "BIGINT")
     _ensure_column(conn, "ticks", "turnover", "DOUBLE")
     _ensure_column(conn, "ticks", "current_volume", "DOUBLE")
     _ensure_column(conn, "ticks", "current_turnover", "DOUBLE")
-    
+
     # 添加 period 列到 ohlc 表
     _ensure_column(conn, "ohlc", "period", "TEXT NOT NULL DEFAULT 'day'")
-    
+
     # 添加 enable_real_trading 列到 ai_trading_config 表
     _ensure_column(conn, "ai_trading_config", "enable_real_trading", "BOOLEAN DEFAULT false")
+
+    # 添加板块轮动新列
+    _ensure_column(conn, "sector_etfs", "etf_type", "TEXT DEFAULT 'sector'")
+    _ensure_column(conn, "sector_etfs", "factor_name", "TEXT")
+    _ensure_column(conn, "sector_etfs", "color", "TEXT")
+    _ensure_column(conn, "sector_performance", "etf_type", "TEXT DEFAULT 'sector'")
+    _ensure_column(conn, "sector_performance", "factor_name", "TEXT")
 
 
 def _ensure_column(conn: DuckDBPyConnection, table: str, column: str, column_type: str) -> None:
@@ -350,4 +368,143 @@ CREATE TABLE IF NOT EXISTS stock_picker_config (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 INSERT OR IGNORE INTO stock_picker_config (id) VALUES (1);
+"""
+
+# ============================================
+# 板块轮动相关表
+# ============================================
+
+_SECTOR_ETFS_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS sector_etfs (
+    symbol TEXT PRIMARY KEY,
+    sector_name TEXT NOT NULL,
+    sector_name_cn TEXT,
+    description TEXT,
+    etf_type TEXT DEFAULT 'sector',
+    factor_name TEXT,
+    color TEXT,
+    is_active BOOLEAN DEFAULT TRUE
+);
+"""
+
+_SECTOR_PERFORMANCE_TABLE_SQL = """
+CREATE SEQUENCE IF NOT EXISTS sector_performance_seq START 1;
+CREATE TABLE IF NOT EXISTS sector_performance (
+    id INTEGER PRIMARY KEY DEFAULT nextval('sector_performance_seq'),
+    symbol TEXT NOT NULL,
+    date DATE NOT NULL,
+    open DOUBLE,
+    high DOUBLE,
+    low DOUBLE,
+    close DOUBLE,
+    volume DOUBLE,
+    change_pct DOUBLE,
+    change_5d DOUBLE,
+    change_20d DOUBLE,
+    change_60d DOUBLE,
+    strength_score DOUBLE,
+    momentum_score DOUBLE,
+    trend_score DOUBLE,
+    etf_type TEXT DEFAULT 'sector',
+    factor_name TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(symbol, date)
+);
+CREATE INDEX IF NOT EXISTS idx_sector_perf_date ON sector_performance(date DESC);
+CREATE INDEX IF NOT EXISTS idx_sector_perf_symbol ON sector_performance(symbol);
+CREATE INDEX IF NOT EXISTS idx_sector_perf_type ON sector_performance(etf_type);
+"""
+
+_SECTOR_STOCKS_TABLE_SQL = """
+CREATE SEQUENCE IF NOT EXISTS sector_stocks_seq START 1;
+CREATE TABLE IF NOT EXISTS sector_stocks (
+    id INTEGER PRIMARY KEY DEFAULT nextval('sector_stocks_seq'),
+    sector_symbol TEXT NOT NULL,
+    stock_symbol TEXT NOT NULL,
+    stock_name TEXT,
+    market_cap DOUBLE,
+    pe_ratio DOUBLE,
+    price DOUBLE,
+    change_pct DOUBLE,
+    volume DOUBLE,
+    rs_rank INTEGER,
+    screened_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(sector_symbol, stock_symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_sector_stocks_sector ON sector_stocks(sector_symbol);
+"""
+
+_SECTOR_ROTATION_CONFIG_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS sector_rotation_config (
+    id INTEGER PRIMARY KEY,
+    auto_sync_enabled BOOLEAN DEFAULT FALSE,
+    sync_interval_hours INTEGER DEFAULT 6,
+    min_strength_score INTEGER DEFAULT 60,
+    lookback_days INTEGER DEFAULT 60,
+    top_sectors_count INTEGER DEFAULT 3,
+    stocks_per_sector INTEGER DEFAULT 10,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+INSERT OR IGNORE INTO sector_rotation_config (id) VALUES (1);
+"""
+
+# 市场快照表（用于 Finviz 热力图）
+_MARKET_SNAPSHOT_TABLE_SQL = """
+CREATE SEQUENCE IF NOT EXISTS market_snapshot_seq START 1;
+CREATE TABLE IF NOT EXISTS market_snapshot (
+    id INTEGER PRIMARY KEY DEFAULT nextval('market_snapshot_seq'),
+    symbol TEXT NOT NULL,
+    name TEXT,
+    sector TEXT,
+    sector_cn TEXT,
+    industry TEXT,
+    market_cap DOUBLE,
+    price DOUBLE,
+    change_pct DOUBLE,
+    volume DOUBLE,
+    snapshot_date DATE NOT NULL,
+    UNIQUE(symbol, snapshot_date)
+);
+CREATE INDEX IF NOT EXISTS idx_snapshot_sector ON market_snapshot(sector);
+CREATE INDEX IF NOT EXISTS idx_snapshot_date ON market_snapshot(snapshot_date DESC);
+"""
+
+# 因子评分表
+_FACTOR_SCORES_TABLE_SQL = """
+CREATE SEQUENCE IF NOT EXISTS factor_scores_seq START 1;
+CREATE TABLE IF NOT EXISTS factor_scores (
+    id INTEGER PRIMARY KEY DEFAULT nextval('factor_scores_seq'),
+    date DATE NOT NULL,
+    factor_name TEXT NOT NULL,
+    factor_name_cn TEXT,
+    avg_change_1d DOUBLE,
+    avg_change_5d DOUBLE,
+    avg_change_20d DOUBLE,
+    avg_change_60d DOUBLE,
+    strength_score DOUBLE,
+    rank INTEGER,
+    trend TEXT,
+    momentum DOUBLE,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(date, factor_name)
+);
+CREATE INDEX IF NOT EXISTS idx_factor_date ON factor_scores(date DESC);
+CREATE INDEX IF NOT EXISTS idx_factor_name ON factor_scores(factor_name);
+"""
+
+# 因子轮动信号表
+_FACTOR_ROTATION_SIGNALS_TABLE_SQL = """
+CREATE SEQUENCE IF NOT EXISTS factor_rotation_seq START 1;
+CREATE TABLE IF NOT EXISTS factor_rotation_signals (
+    id INTEGER PRIMARY KEY DEFAULT nextval('factor_rotation_seq'),
+    date DATE NOT NULL,
+    dominant_factor TEXT,
+    rotation_signal TEXT,
+    confidence DOUBLE,
+    factor_momentum TEXT,
+    recommendation TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(date)
+);
+CREATE INDEX IF NOT EXISTS idx_rotation_date ON factor_rotation_signals(date DESC);
 """

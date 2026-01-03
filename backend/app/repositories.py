@@ -17,6 +17,7 @@ CRED_KEYS = {
 AI_CRED_KEYS = {
     "DEEPSEEK_API_KEY": "deepseek_api_key",
     "TAVILY_API_KEY": "tavily_api_key",
+    "EODHD_API_KEY": "eodhd_api_key",
 }
 
 
@@ -101,10 +102,12 @@ def load_ai_credentials() -> Dict[str, str]:
     settings = get_settings()
     fernet = settings.get_fernet()
     transformed: Dict[str, str] = {}
+    db_keys = list(AI_CRED_KEYS.values())
+    placeholders = ", ".join(["?" for _ in db_keys])
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT key, value FROM settings WHERE key IN (?, ?)",
-            list(AI_CRED_KEYS.values()),
+            f"SELECT key, value FROM settings WHERE key IN ({placeholders})",
+            db_keys,
         ).fetchall()
     for db_key, encrypted in rows:
         env_key = _ai_env_key_from_db_key(db_key)

@@ -25,7 +25,8 @@ const EMPTY_CREDS: Credentials = {
 
 const EMPTY_AI_CREDS: AICredentials = {
   DEEPSEEK_API_KEY: "",
-  TAVILY_API_KEY: "",  // ⬆️ 新增
+  TAVILY_API_KEY: "",
+  EODHD_API_KEY: "",  // 板块数据 API
 };
 
 const PERIOD_OPTIONS = [
@@ -368,7 +369,7 @@ export default function SettingsPage() {
           {/* ⬆️ 新增Tavily配置 */}
           <div>
             <label className="label">
-              Tavily API Key 
+              Tavily API Key
               <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
                 🔍 新闻舆情分析（V3.0新增）
               </span>
@@ -382,9 +383,9 @@ export default function SettingsPage() {
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               用于AI选股时搜索实时新闻和舆情分析，免费1000次/月。获取 API Key：
-              <a 
-                href="https://tavily.com/" 
-                target="_blank" 
+              <a
+                href="https://tavily.com/"
+                target="_blank"
                 rel="noopener noreferrer"
                 className="text-primary-600 dark:text-primary-400 hover:underline ml-1"
               >
@@ -393,6 +394,37 @@ export default function SettingsPage() {
             </p>
             <div className="mt-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
               💡 提示：配置Tavily后，AI选股将结合实时新闻进行综合评分（新闻舆情20分，V3.1舆情增强版）
+            </div>
+          </div>
+
+          {/* EODHD 板块数据 API */}
+          <div>
+            <label className="label">
+              EODHD API Key
+              <span className="ml-2 text-xs font-normal text-orange-600 dark:text-orange-400">
+                🔥 板块轮动分析
+              </span>
+            </label>
+            <input
+              type="password"
+              className="input-field"
+              value={aiCredentials.EODHD_API_KEY || ""}
+              onChange={handleAICredChange("EODHD_API_KEY")}
+              placeholder="输入你的 EODHD API Key（可选）"
+            />
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              用于获取板块 ETF 数据和股票筛选，免费 20 次/天。获取 API Key：
+              <a
+                href="https://eodhd.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary-600 dark:text-primary-400 hover:underline ml-1"
+              >
+                https://eodhd.com/
+              </a>
+            </p>
+            <div className="mt-2 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-2 rounded">
+              💡 提示：配置 EODHD 后，可使用"板块轮动"功能分析 11 个 SPDR 板块 ETF 并筛选强势股票
             </div>
           </div>
 

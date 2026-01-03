@@ -21,6 +21,7 @@ from .routers import position_manager as position_manager_router
 from .routers import ai_trading as ai_trading_router
 from .routers import stock_picker as stock_picker_router
 from .routers import ai_config as ai_config_router  # ⬆️ 新增AI配置路由
+from .routers import sector_rotation as sector_rotation_router  # 板块轮动路由
 from .streaming import quote_stream_manager
 from .position_monitor import get_position_monitor
 from .ai_trading_engine import get_ai_trading_engine
@@ -65,6 +66,7 @@ app.include_router(position_manager_router.router)
 app.include_router(ai_trading_router.router)
 app.include_router(stock_picker_router.router)
 app.include_router(ai_config_router.router)  # ⬆️ 注册AI配置路由
+app.include_router(sector_rotation_router.router)  # 板块轮动路由
 
 # 配置日志 - 确保所有模块的日志都能输出
 logging.basicConfig(

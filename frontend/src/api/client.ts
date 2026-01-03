@@ -6,7 +6,8 @@ export type Credentials = {
 
 export type AICredentials = {
   DEEPSEEK_API_KEY: string;
-  TAVILY_API_KEY?: string;  // ⬆️ 新增Tavily搜索引擎API Key（可选）
+  TAVILY_API_KEY?: string;
+  EODHD_API_KEY?: string;  // 板块数据 API
 };
 
 export type SymbolsResponse = {

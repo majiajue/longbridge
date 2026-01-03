@@ -22,11 +22,13 @@ class CredentialResponse(BaseModel):
 class AICredentialPayload(BaseModel):
     DEEPSEEK_API_KEY: str = Field(..., description="DeepSeek API Key")
     TAVILY_API_KEY: Optional[str] = Field(None, description="Tavily API Key (可选)")
+    EODHD_API_KEY: Optional[str] = Field(None, description="EODHD API Key (板块数据)")
 
 
 class AICredentialResponse(BaseModel):
     DEEPSEEK_API_KEY: Optional[str] = None
     TAVILY_API_KEY: Optional[str] = None
+    EODHD_API_KEY: Optional[str] = None
 
 
 class SymbolPayload(BaseModel):

@@ -27,7 +27,16 @@
       "WebFetch(domain:g2.antv.antgroup.com)",
       "Bash(ping:*)",
       "Bash(git remote set-url:*)",
-      "Bash(git config:*)"
+      "Bash(git config:*)",
+      "Bash(pip show:*)",
+      "WebSearch",
+      "WebFetch(domain:eodhd.com)",
+      "Bash(grep:*)",
+      "Bash(cat:*)",
+      "Bash(tree:*)",
+      "Bash(ls:*)",
+      "Bash(xargs:*)",
+      "Bash(wc:*)"
     ],
     "deny": [],
     "ask": []
