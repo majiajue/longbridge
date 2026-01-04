@@ -41,8 +41,8 @@ check_backend() {
     echo "📊 检查后端环境..."
 
     if [ ! -d "backend/.venv" ]; then
-        echo "❌ 错误: 未找到虚拟环境，请先运行: python3 -m venv backend/.venv"
-        exit 1
+        echo "⚠️  警告: 未找到虚拟环境，将自动创建: backend/.venv"
+        python3 -m venv backend/.venv
     fi
     echo "✅ 虚拟环境存在"
 
@@ -50,6 +50,26 @@ check_backend() {
         echo "⚠️  警告: 未找到 .env 配置文件，请配置 Longbridge API 凭据"
     else
         echo "✅ 环境配置文件存在"
+    fi
+
+    if [ ! -f "backend/.venv/.deps_installed" ]; then
+        echo "📦 安装后端依赖..."
+
+        backend/.venv/bin/python -m pip install -U pip
+
+        if ! backend/.venv/bin/python -m pip install -e backend; then
+            if [ -f "backend/requirements.txt" ]; then
+                echo "⚠️  警告: pip install -e backend 失败，尝试 requirements.txt"
+                backend/.venv/bin/python -m pip install -r backend/requirements.txt
+            else
+                echo "❌ 错误: 后端依赖安装失败（且未找到 backend/requirements.txt 作为回退）"
+                exit 1
+            fi
+        fi
+
+        touch backend/.venv/.deps_installed
+        echo "✅ 后端依赖已安装"
+        echo ""
     fi
 
     echo ""
