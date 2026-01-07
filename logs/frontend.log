@@ -2,9 +2,10 @@
 > longbridge-quant-frontend@0.1.0 dev
 > vite
 
+Port 5173 is in use, trying another one...
 
-  VITE v5.4.20  ready in 728 ms
+  VITE v5.4.20  ready in 458 ms
 
-  ➜  Local:   http://localhost:5173/
+  ➜  Local:   http://localhost:5174/
   ➜  Network: use --host to expose
 [baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`

@@ -401,3 +401,102 @@ export async function getETFPerformance(
   const res = await fetch(url);
   return handleResponse(res);
 }
+
+// ========== ETF 持仓数据 ==========
+
+export interface ETFHolding {
+  symbol: string;
+  code: string;
+  name: string;
+  sector: string;
+  industry: string;
+  country: string;
+  assets_pct: number;
+}
+
+export interface ETFHoldingsData {
+  symbol: string;
+  general: {
+    name: string;
+    description: string;
+    category: string;
+    fund_family: string;
+    fund_type: string;
+    exchange: string;
+    currency: string;
+    avg_market_cap?: number;
+    holdings_turnover?: number;
+  };
+  holdings: ETFHolding[];
+  sector_weights: Record<string, number>;
+  top_10_holdings: ETFHolding[];
+  total_assets: number;
+}
+
+interface ETFHoldingsResponse extends BaseResponse {
+  symbol: string;
+  general: ETFHoldingsData['general'];
+  holdings: ETFHolding[];
+  sector_weights: Record<string, number>;
+  top_10_holdings: ETFHolding[];
+  total_assets: number;
+}
+
+interface SyncHoldingsResponse extends BaseResponse {
+  etf_type: string;
+  success: Array<{ symbol: string; holdings_count: number }>;
+  failed: string[];
+}
+
+export interface MarketIndex {
+  symbol: string;
+  name: string;
+  price: number;
+  change: number;
+  change_pct: number;
+  volume: number;
+}
+
+export interface MarketSector {
+  symbol: string;
+  name: string;
+  name_en: string;
+  color: string;
+  price: number;
+  change_pct: number;
+}
+
+interface MarketOverviewResponse extends BaseResponse {
+  indices: MarketIndex[];
+  sectors: MarketSector[];
+  market_status: string;
+  updated_at: string;
+}
+
+/**
+ * 获取 ETF 持仓和板块权重数据
+ * @param symbol ETF 代码，如 XLK, SPY
+ */
+export async function getETFHoldings(symbol: string): Promise<ETFHoldingsResponse> {
+  const res = await fetch(`${API_BASE}/api/sector-rotation/etf-holdings/${symbol}`);
+  return handleResponse(res);
+}
+
+/**
+ * 批量同步 ETF 持仓数据
+ * @param etfType ETF 类型: sector/all
+ */
+export async function syncETFHoldings(etfType: string = "sector"): Promise<SyncHoldingsResponse> {
+  const res = await fetch(`${API_BASE}/api/sector-rotation/sync-holdings?etf_type=${etfType}`, {
+    method: "POST",
+  });
+  return handleResponse(res);
+}
+
+/**
+ * 获取市场概览数据
+ */
+export async function getMarketOverview(): Promise<MarketOverviewResponse> {
+  const res = await fetch(`${API_BASE}/api/sector-rotation/market-overview`);
+  return handleResponse(res);
+}

@@ -341,3 +341,71 @@ async def get_etf_performance(
         "count": len(etfs),
         "etfs": etfs
     }
+
+
+# ========== ETF 持仓数据 ==========
+
+@router.get("/etf-holdings/{symbol}")
+async def get_etf_holdings(symbol: str):
+    """
+    获取 ETF 持仓和板块权重数据
+
+    返回 ETF 的成分股、板块权重、前10大持仓等信息
+    """
+    service = get_sector_rotation_service()
+    result = await service.get_etf_holdings(symbol)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return {
+        "status": "ok",
+        **result
+    }
+
+
+@router.post("/sync-holdings")
+async def sync_etf_holdings(
+    etf_type: Optional[str] = Query(default="sector", description="ETF 类型: sector/all")
+):
+    """
+    批量同步 ETF 持仓数据
+
+    从 EODHD API 获取 ETF 持仓信息并保存到数据库
+    """
+    from ..eodhd_client import SECTOR_ETFS, ALL_ETFS
+
+    if etf_type == "all":
+        symbols = list(ALL_ETFS.keys())
+    else:
+        symbols = list(SECTOR_ETFS.keys())
+
+    service = get_sector_rotation_service()
+    result = await service.sync_etf_holdings_batch(symbols)
+
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    return {
+        "status": "ok",
+        "etf_type": etf_type,
+        "message": f"同步完成: {len(result['success'])} 成功, {len(result['failed'])} 失败",
+        "success": result["success"],
+        "failed": result["failed"]
+    }
+
+
+@router.get("/market-overview")
+async def get_market_overview():
+    """
+    获取市场概览数据
+
+    返回主要指数和板块的实时表现
+    """
+    service = get_sector_rotation_service()
+    data = service.get_market_overview()
+
+    return {
+        "status": "ok",
+        **data
+    }

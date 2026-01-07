@@ -1079,6 +1079,159 @@ class SectorRotationService:
             for symbol, info in etf_dict.items()
         ]
 
+    # ========== ETF 持仓数据 ==========
+
+    async def get_etf_holdings(self, symbol: str) -> Dict:
+        """
+        获取 ETF 持仓和板块权重数据
+
+        参数:
+            symbol: ETF 代码，如 XLK, SPY
+
+        返回:
+            {symbol, general, holdings, sector_weights, top_10_holdings, total_assets}
+        """
+        client = self._get_client()
+        if not client:
+            return {"error": "未配置 EODHD API Key", "symbol": symbol}
+
+        try:
+            data = client.get_etf_holdings(symbol)
+            if not data:
+                return {"error": f"无法获取 {symbol} 持仓数据", "symbol": symbol}
+
+            # 保存持仓数据到数据库
+            self._save_etf_holdings(symbol, data)
+
+            return data
+        finally:
+            client.close()
+
+    def _save_etf_holdings(self, etf_symbol: str, data: Dict):
+        """保存 ETF 持仓数据到数据库"""
+        holdings = data.get("holdings", []) or data.get("top_10_holdings", [])
+        if not holdings:
+            return
+
+        with get_connection() as conn:
+            # 清除旧数据
+            conn.execute(
+                "DELETE FROM sector_stocks WHERE sector_symbol = ?",
+                (etf_symbol,)
+            )
+
+            # 插入新数据
+            for i, holding in enumerate(holdings[:50]):  # 最多保存前50只
+                if not holding.get("symbol") and not holding.get("code"):
+                    continue
+
+                symbol = holding.get("symbol") or f"{holding.get('code')}.US"
+                conn.execute("""
+                    INSERT INTO sector_stocks
+                    (sector_symbol, stock_symbol, stock_name, market_cap,
+                     pe_ratio, price, change_pct, rs_rank, screened_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    etf_symbol,
+                    symbol,
+                    holding.get("name", ""),
+                    None,  # market_cap not available
+                    None,  # pe_ratio not available
+                    None,  # price not available
+                    holding.get("assets_pct", 0),  # 用 assets_pct 作为权重
+                    i + 1,
+                    datetime.now()
+                ))
+
+    async def sync_etf_holdings_batch(self, etf_symbols: List[str] = None) -> Dict:
+        """
+        批量同步 ETF 持仓数据
+
+        参数:
+            etf_symbols: ETF 代码列表，为空则同步所有板块 ETF
+
+        返回:
+            {success: [...], failed: [...]}
+        """
+        if etf_symbols is None:
+            etf_symbols = list(SECTOR_ETFS.keys())
+
+        client = self._get_client()
+        if not client:
+            return {"error": "未配置 EODHD API Key", "success": [], "failed": []}
+
+        results = {"success": [], "failed": []}
+
+        try:
+            for i, symbol in enumerate(etf_symbols):
+                try:
+                    logger.info(f"📥 [{i+1}/{len(etf_symbols)}] 同步 {symbol} 持仓...")
+                    data = client.get_etf_holdings(symbol)
+
+                    if data and (data.get("holdings") or data.get("top_10_holdings")):
+                        self._save_etf_holdings(symbol, data)
+                        results["success"].append({
+                            "symbol": symbol,
+                            "holdings_count": len(data.get("holdings", [])) or len(data.get("top_10_holdings", []))
+                        })
+                        logger.info(f"✅ [{i+1}/{len(etf_symbols)}] {symbol} 持仓同步成功")
+                    else:
+                        results["failed"].append(symbol)
+                        logger.warning(f"⚠️ [{i+1}/{len(etf_symbols)}] {symbol} 无持仓数据")
+
+                    # 添加延迟避免 API 速率限制
+                    if i % 3 == 0 and i < len(etf_symbols) - 1:
+                        await asyncio.sleep(0.5)
+
+                except Exception as e:
+                    logger.error(f"❌ [{i+1}/{len(etf_symbols)}] {symbol} 同步失败: {e}")
+                    results["failed"].append(symbol)
+
+            logger.info(f"📊 持仓同步完成: {len(results['success'])} 成功, {len(results['failed'])} 失败")
+            return results
+        finally:
+            client.close()
+
+    def get_market_overview(self) -> Dict:
+        """
+        获取市场概览数据
+
+        返回:
+            {indices, sectors, market_status, updated_at}
+        """
+        client = self._get_client()
+        if not client:
+            # 如果没有 API Key，从数据库获取缓存数据
+            return self._get_cached_market_overview()
+
+        try:
+            data = client.get_market_overview()
+            data["updated_at"] = datetime.now().isoformat()
+            return data
+        finally:
+            client.close()
+
+    def _get_cached_market_overview(self) -> Dict:
+        """从数据库获取缓存的市场概览数据"""
+        sectors = self.calculate_sector_strength()
+
+        return {
+            "indices": [],
+            "sectors": [
+                {
+                    "symbol": s["symbol"],
+                    "name": s["name_cn"],
+                    "name_en": s["name"],
+                    "color": s["color"],
+                    "price": s.get("close", 0),
+                    "change_pct": s["change_1d"]
+                }
+                for s in sectors
+            ],
+            "market_status": "cached",
+            "updated_at": sectors[0]["date"] if sectors else None
+        }
+
 
 # 全局单例
 _sector_rotation_service = None

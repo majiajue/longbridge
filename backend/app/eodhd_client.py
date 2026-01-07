@@ -338,6 +338,175 @@ class EODHDClient:
             logger.error(f"❌ 获取实时行情失败 {symbol}: {e}")
             return {}
 
+    def get_etf_holdings(self, symbol: str) -> Dict:
+        """
+        获取 ETF 持仓和板块权重数据
+
+        参数:
+            symbol: ETF 代码，如 XLK, SPY
+
+        返回:
+            {
+                general: {...},
+                holdings: [{code, name, sector, assets_pct, ...}],
+                sector_weights: {Technology: 25.5, ...},
+                top_10_holdings: [...],
+                total_assets: float
+            }
+        """
+        url = f"{self.BASE_URL}/fundamentals/{symbol}.US"
+        params = {
+            "api_token": self.api_key,
+            "fmt": "json"
+        }
+
+        try:
+            logger.info(f"📊 获取 ETF 持仓数据: {symbol}")
+            response = self.client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            result = {
+                "symbol": symbol,
+                "general": {},
+                "holdings": [],
+                "sector_weights": {},
+                "top_10_holdings": [],
+                "total_assets": 0
+            }
+
+            # 解析通用信息
+            if "General" in data:
+                general = data["General"]
+                result["general"] = {
+                    "name": general.get("Name", ""),
+                    "description": general.get("Description", ""),
+                    "category": general.get("Category", ""),
+                    "fund_family": general.get("Fund_Family", ""),
+                    "fund_type": general.get("Fund_Type", ""),
+                    "exchange": general.get("Exchange", ""),
+                    "currency": general.get("CurrencyCode", "USD")
+                }
+
+            # 解析 ETF 数据
+            if "ETF_Data" in data:
+                etf_data = data["ETF_Data"]
+
+                # 总资产
+                result["total_assets"] = etf_data.get("TotalAssets", 0)
+                result["general"]["avg_market_cap"] = etf_data.get("Average_Mkt_Cap_Mil", 0)
+                result["general"]["holdings_turnover"] = etf_data.get("AnnualHoldingsTurnover", 0)
+
+                # 板块权重
+                sector_weights = etf_data.get("Sector_Weights", {})
+                if sector_weights:
+                    for sector_name, weights in sector_weights.items():
+                        if isinstance(weights, dict):
+                            pct = weights.get("Equity_%", 0)
+                        else:
+                            pct = weights
+                        if pct and pct > 0:
+                            result["sector_weights"][sector_name] = round(float(pct), 2)
+
+                # 前10大持仓
+                top_10 = etf_data.get("Top_10_Holdings", {})
+                if top_10:
+                    for ticker, holding_data in top_10.items():
+                        if isinstance(holding_data, dict):
+                            result["top_10_holdings"].append({
+                                "symbol": ticker,
+                                "code": holding_data.get("Code", ticker.split(".")[0] if "." in ticker else ticker),
+                                "name": holding_data.get("Name", ""),
+                                "sector": holding_data.get("Sector", ""),
+                                "industry": holding_data.get("Industry", ""),
+                                "country": holding_data.get("Country", ""),
+                                "assets_pct": round(float(holding_data.get("Assets_%", 0)), 2)
+                            })
+
+                # 全部持仓（如果有）
+                all_holdings = etf_data.get("Holdings", {})
+                if all_holdings:
+                    for ticker, holding_data in all_holdings.items():
+                        if isinstance(holding_data, dict):
+                            result["holdings"].append({
+                                "symbol": ticker,
+                                "code": holding_data.get("Code", ticker.split(".")[0] if "." in ticker else ticker),
+                                "name": holding_data.get("Name", ""),
+                                "sector": holding_data.get("Sector", ""),
+                                "industry": holding_data.get("Industry", ""),
+                                "country": holding_data.get("Country", ""),
+                                "assets_pct": round(float(holding_data.get("Assets_%", 0)), 4)
+                            })
+
+            # 按权重排序
+            result["top_10_holdings"].sort(key=lambda x: x["assets_pct"], reverse=True)
+            result["holdings"].sort(key=lambda x: x["assets_pct"], reverse=True)
+
+            logger.info(f"✅ 获取 {symbol} 持仓成功: {len(result['holdings'])} 只股票, {len(result['sector_weights'])} 个板块")
+            return result
+
+        except httpx.HTTPStatusError as e:
+            logger.error(f"❌ ETF 持仓 API 错误 {symbol}: {e.response.status_code}")
+            return {}
+        except Exception as e:
+            logger.error(f"❌ 获取 ETF 持仓失败 {symbol}: {e}")
+            return {}
+
+    def get_market_overview(self) -> Dict:
+        """
+        获取市场概览数据（主要指数和板块表现）
+
+        返回:
+            {
+                indices: [{symbol, name, price, change, change_pct}, ...],
+                sectors: [{symbol, name, change_pct}, ...],
+                market_status: str
+            }
+        """
+        result = {
+            "indices": [],
+            "sectors": [],
+            "market_status": "unknown"
+        }
+
+        # 获取主要指数实时数据
+        major_indices = ["SPY", "QQQ", "DIA", "IWM", "VTI"]
+        for idx_symbol in major_indices:
+            try:
+                quote = self.get_real_time_quote(idx_symbol)
+                if quote:
+                    result["indices"].append({
+                        "symbol": idx_symbol,
+                        "name": INDEX_ETFS.get(idx_symbol, {}).get("name_cn", idx_symbol),
+                        "price": quote.get("close", 0),
+                        "change": quote.get("change", 0),
+                        "change_pct": quote.get("change_p", 0),
+                        "volume": quote.get("volume", 0)
+                    })
+            except Exception as e:
+                logger.warning(f"获取 {idx_symbol} 行情失败: {e}")
+
+        # 获取板块 ETF 实时数据
+        for sector_symbol in SECTOR_ETFS.keys():
+            try:
+                quote = self.get_real_time_quote(sector_symbol)
+                if quote:
+                    result["sectors"].append({
+                        "symbol": sector_symbol,
+                        "name": SECTOR_ETFS[sector_symbol].get("name_cn", sector_symbol),
+                        "name_en": SECTOR_ETFS[sector_symbol].get("name", sector_symbol),
+                        "color": SECTOR_ETFS[sector_symbol].get("color", "#666"),
+                        "price": quote.get("close", 0),
+                        "change_pct": quote.get("change_p", 0)
+                    })
+            except Exception as e:
+                logger.warning(f"获取 {sector_symbol} 行情失败: {e}")
+
+        # 按涨跌幅排序
+        result["sectors"].sort(key=lambda x: x["change_pct"], reverse=True)
+
+        return result
+
     def close(self):
         """关闭 HTTP 客户端"""
         self.client.close()

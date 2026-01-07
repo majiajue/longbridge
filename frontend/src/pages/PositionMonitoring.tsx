@@ -1,57 +1,33 @@
-import { useEffect, useState, useRef, useCallback } from 'react';
+/**
+ * 持仓监控管理页面 - 现代化重构版
+ */
+import { useEffect, useState, useRef, useCallback } from "react";
 import {
-  Box,
+  Settings,
+  PlayArrow,
+  Pause,
+  Block,
+  TrendingUp,
+  TrendingDown,
+  CheckCircle,
+  Warning,
+  Visibility,
+  VisibilityOff,
+  Refresh,
+  Close,
+} from "@mui/icons-material";
+import {
+  PageHeader,
   Card,
-  CardContent,
-  Typography,
-  Switch,
+  CardHeader,
   Button,
-  Chip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Checkbox,
-  FormControlLabel,
-  FormGroup,
-  Alert,
-  Grid,
-  Divider,
-  Slider,
-  Stack,
-  Tooltip,
   Badge,
-  LinearProgress,
-} from '@mui/material';
-import SettingsIcon from '@mui/icons-material/Settings';
-import PlayIcon from '@mui/icons-material/PlayCircleOutlineOutlined';
-import PauseIcon from '@mui/icons-material/Pause';
-import BlockIcon from '@mui/icons-material/Block';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import CheckCircleIcon from '@mui/icons-material/CheckCircleSharp';
-import WarningIcon from '@mui/icons-material/WarningAmber';
-import InfoIcon from '@mui/icons-material/Info';
-import EyeIcon from '@mui/icons-material/RemoveRedEye';
-import EyeOffIcon from '@mui/icons-material/VisibilityOffRounded';
-import SpeedIcon from '@mui/icons-material/SpeedOutlined';
-import SecurityIcon from '@mui/icons-material/SecurityRounded';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
-import { resolveWsUrl } from '../api/client';
+  Select,
+  Alert,
+  LoadingSpinner,
+  EmptyState,
+} from "../components/ui";
+import { resolveWsUrl } from "../api/client";
 
 interface PositionMonitoring {
   symbol: string;
@@ -89,11 +65,11 @@ interface Strategy {
 }
 
 const AVAILABLE_STRATEGIES: Strategy[] = [
-  { id: 'ma_crossover', name: '均线交叉', description: '基于MA金叉死叉' },
-  { id: 'rsi_oversold', name: 'RSI超卖反弹', description: 'RSI指标反转' },
-  { id: 'breakout', name: '突破策略', description: '价格突破关键位' },
-  { id: 'bollinger_bands', name: '布林带', description: '均值回归' },
-  { id: 'macd_divergence', name: 'MACD背离', description: '趋势反转' },
+  { id: "ma_crossover", name: "均线交叉", description: "基于MA金叉死叉" },
+  { id: "rsi_oversold", name: "RSI超卖反弹", description: "RSI指标反转" },
+  { id: "breakout", name: "突破策略", description: "价格突破关键位" },
+  { id: "bollinger_bands", name: "布林带", description: "均值回归" },
+  { id: "macd_divergence", name: "MACD背离", description: "趋势反转" },
 ];
 
 export default function PositionMonitoringPage() {
@@ -101,134 +77,118 @@ export default function PositionMonitoringPage() {
   const [globalSettings, setGlobalSettings] = useState<GlobalSettings | null>(null);
   const [loading, setLoading] = useState(true);
   const [selectedPositions, setSelectedPositions] = useState<Set<string>>(new Set());
-  const [editDialog, setEditDialog] = useState<{
-    open: boolean;
-    position: PositionMonitoring | null;
-  }>({ open: false, position: null });
-  const [settingsDialog, setSettingsDialog] = useState(false);
+  const [editPosition, setEditPosition] = useState<PositionMonitoring | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
-  const [priceFlash, setPriceFlash] = useState<Record<string, 'up' | 'down' | null>>({});
-  const [notifications, setNotifications] = useState<Array<{id: string; message: string; type: 'info' | 'warning' | 'error' | 'success'; timestamp: Date}>>([]);
+  const [priceFlash, setPriceFlash] = useState<Record<string, "up" | "down" | null>>({});
   const wsRef = useRef<WebSocket | null>(null);
   const priceFlashTimeouts = useRef<Record<string, NodeJS.Timeout>>({});
 
-  // Load positions with monitoring config
   const loadPositions = async () => {
     try {
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const base = import.meta.env.VITE_API_BASE || "http://localhost:8000";
       const response = await fetch(`${base}/monitoring/positions`);
       if (response.ok) {
         const data = await response.json();
         setPositions(data.positions);
         setGlobalSettings(data.global_settings);
       } else {
-        setError('Failed to load positions');
+        setError("加载持仓失败");
       }
     } catch (e) {
-      setError('Failed to connect to backend');
-      console.error('Error loading positions:', e);
+      setError("无法连接到后端服务");
     } finally {
       setLoading(false);
     }
   };
 
-  // Update single position monitoring
-  const updatePositionMonitoring = async (
-    symbol: string,
-    updates: any
-  ) => {
+  const updatePositionMonitoring = async (symbol: string, updates: any) => {
     try {
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const base = import.meta.env.VITE_API_BASE || "http://localhost:8000";
       const response = await fetch(`${base}/monitoring/position/${symbol}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
       });
-
       if (response.ok) {
         await loadPositions();
-        setEditDialog({ open: false, position: null });
+        setEditPosition(null);
+        setSuccess("更新成功");
       }
     } catch (e) {
-      console.error('Error updating position:', e);
+      setError("更新失败");
     }
   };
 
-  // Batch update monitoring status
   const batchUpdateMonitoring = async (status: string) => {
     if (selectedPositions.size === 0) return;
-
     try {
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const base = import.meta.env.VITE_API_BASE || "http://localhost:8000";
       const response = await fetch(`${base}/monitoring/batch-update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symbols: Array.from(selectedPositions),
           monitoring_status: status,
         }),
       });
-
       if (response.ok) {
         await loadPositions();
         setSelectedPositions(new Set());
+        setSuccess(`已更新 ${selectedPositions.size} 个持仓`);
       }
     } catch (e) {
-      console.error('Error batch updating:', e);
+      setError("批量更新失败");
     }
   };
 
-  // Toggle position monitoring
   const toggleMonitoring = async (symbol: string, enabled: boolean) => {
     await updatePositionMonitoring(symbol, {
-      monitoring_status: enabled ? 'active' : 'paused',
+      monitoring_status: enabled ? "active" : "paused",
     });
   };
 
-  // Exclude position from monitoring
   const excludePosition = async (symbol: string) => {
     try {
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const base = import.meta.env.VITE_API_BASE || "http://localhost:8000";
       const response = await fetch(`${base}/monitoring/exclude/${symbol}`, {
-        method: 'POST',
+        method: "POST",
       });
-
       if (response.ok) {
         await loadPositions();
+        setSuccess(`已排除 ${symbol}`);
       }
     } catch (e) {
-      console.error('Error excluding position:', e);
+      setError("排除失败");
     }
   };
 
-  // Update global settings
   const updateGlobalSettings = async (settings: GlobalSettings) => {
     try {
-      const base = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+      const base = import.meta.env.VITE_API_BASE || "http://localhost:8000";
       const response = await fetch(`${base}/monitoring/global-settings`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
-
       if (response.ok) {
         setGlobalSettings(settings);
-        setSettingsDialog(false);
+        setShowSettings(false);
+        setSuccess("全局设置已保存");
       }
     } catch (e) {
-      console.error('Error updating global settings:', e);
+      setError("保存设置失败");
     }
   };
 
-  // WebSocket connection for real-time updates
   const connectWebSocket = useCallback(() => {
-    const wsUrl = resolveWsUrl('/ws/quotes');
+    const wsUrl = resolveWsUrl("/ws/quotes");
     const ws = new WebSocket(wsUrl);
 
     ws.onopen = () => {
-      console.log('WebSocket connected for position monitoring');
       setWsConnected(true);
       setError(null);
     };
@@ -236,38 +196,20 @@ export default function PositionMonitoringPage() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        
-        // Handle quote updates
-        if (data.type === 'quote' && data.symbol) {
+        if (data.type === "quote" && data.symbol) {
           updatePositionPrice(data.symbol, data.last_done || data.close);
         }
-        
-        // Handle monitoring alerts
-        if (data.type === 'monitoring_alert') {
-          addNotification({
-            message: data.message,
-            type: data.severity || 'info',
-          });
-        }
-        
-        // Handle portfolio updates
-        if (data.type === 'portfolio_update') {
+        if (data.type === "portfolio_update") {
           setLastUpdate(new Date());
-          // Optionally reload positions
           loadPositions();
         }
       } catch (e) {
-        console.error('Error parsing WebSocket message:', e);
+        console.error("Error parsing WebSocket message:", e);
       }
     };
 
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setWsConnected(false);
-    };
-
+    ws.onerror = () => setWsConnected(false);
     ws.onclose = () => {
-      console.log('WebSocket disconnected, reconnecting...');
       setWsConnected(false);
       setTimeout(connectWebSocket, 3000);
     };
@@ -275,7 +217,6 @@ export default function PositionMonitoringPage() {
     wsRef.current = ws;
   }, []);
 
-  // Update position price with flash effect
   const updatePositionPrice = (symbol: string, newPrice: number) => {
     setPositions((prev) => {
       return prev.map((pos) => {
@@ -283,711 +224,552 @@ export default function PositionMonitoringPage() {
           const oldPrice = pos.current_price;
           const pnl = (newPrice - pos.avg_cost) * pos.quantity;
           const pnl_ratio = (newPrice - pos.avg_cost) / pos.avg_cost;
-          
-          // Set flash effect
+
           if (newPrice > oldPrice) {
-            setPriceFlash((f) => ({ ...f, [symbol]: 'up' }));
+            setPriceFlash((f) => ({ ...f, [symbol]: "up" }));
           } else if (newPrice < oldPrice) {
-            setPriceFlash((f) => ({ ...f, [symbol]: 'down' }));
+            setPriceFlash((f) => ({ ...f, [symbol]: "down" }));
           }
-          
-          // Clear flash after animation
+
           if (priceFlashTimeouts.current[symbol]) {
             clearTimeout(priceFlashTimeouts.current[symbol]);
           }
           priceFlashTimeouts.current[symbol] = setTimeout(() => {
             setPriceFlash((f) => ({ ...f, [symbol]: null }));
           }, 1000);
-          
-          return {
-            ...pos,
-            current_price: newPrice,
-            market_value: newPrice * pos.quantity,
-            pnl,
-            pnl_ratio,
-          };
+
+          return { ...pos, current_price: newPrice, market_value: newPrice * pos.quantity, pnl, pnl_ratio };
         }
         return pos;
       });
     });
   };
 
-  // Add notification
-  const addNotification = (notification: { message: string; type: 'info' | 'warning' | 'error' | 'success' }) => {
-    const id = Date.now().toString();
-    setNotifications((prev) => [
-      { id, ...notification, timestamp: new Date() },
-      ...prev.slice(0, 9), // Keep last 10
-    ]);
-    
-    // Auto-remove after 10 seconds
-    setTimeout(() => {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    }, 10000);
-  };
-
   useEffect(() => {
     loadPositions();
     connectWebSocket();
-    
-    const interval = setInterval(loadPositions, 30000); // Refresh every 30s (WS provides real-time)
-    
+    const interval = setInterval(loadPositions, 30000);
     return () => {
       clearInterval(interval);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      if (wsRef.current) wsRef.current.close();
       Object.values(priceFlashTimeouts.current).forEach(clearTimeout);
     };
   }, [connectWebSocket]);
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <CheckCircleIcon color="success" />;
-      case 'paused':
-        return <PauseIcon color="warning" />;
-      case 'excluded':
-        return <BlockIcon color="error" />;
-      default:
-        return <InfoIcon />;
+  useEffect(() => {
+    if (success || error) {
+      const timer = setTimeout(() => {
+        setSuccess(null);
+        setError(null);
+      }, 5000);
+      return () => clearTimeout(timer);
     }
-  };
-
-  const getStrategyModeChip = (mode: string) => {
-    switch (mode) {
-      case 'auto':
-        return <Chip label="自动执行" color="success" size="small" icon={<SpeedIcon />} />;
-      case 'alert_only':
-        return <Chip label="仅提醒" color="warning" size="small" icon={<WarningIcon />} />;
-      case 'disabled':
-        return <Chip label="禁用" color="default" size="small" />;
-      default:
-        return <Chip label={mode} size="small" />;
-    }
-  };
+  }, [success, error]);
 
   if (loading) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Typography>加载中...</Typography>
-      </Box>
-    );
+    return <LoadingSpinner size="lg" text="加载持仓监控..." />;
   }
 
-  // Calculate totals
   const totalPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
   const totalMarketValue = positions.reduce((sum, p) => sum + p.market_value, 0);
   const totalCost = positions.reduce((sum, p) => sum + p.avg_cost * p.quantity, 0);
   const totalPnlRatio = totalCost > 0 ? totalPnl / totalCost : 0;
+  const activeCount = positions.filter((p) => p.monitoring_status === "active").length;
 
   return (
-    <Box className="animate-fade-in">
-      {/* Header */}
-      <Card className="bg-gradient-to-br from-blue-600 to-purple-700 text-white mb-6">
-        <CardContent>
-          <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Box>
-              <Typography variant="h4" fontWeight="bold" gutterBottom>
-                持仓监控管理
-              </Typography>
-              <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                为每个持仓配置个性化的监控策略
-              </Typography>
-            </Box>
-            <Stack direction="row" spacing={2} alignItems="center">
-              <Badge badgeContent={positions.filter(p => p.monitoring_status === 'active').length} color="success">
-                <Chip
-                  icon={<EyeIcon />}
-                  label="监控中"
-                  sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                />
-              </Badge>
-              <Badge badgeContent={positions.filter(p => p.monitoring_status === 'paused').length} color="warning">
-                <Chip
-                  icon={<PauseIcon />}
-                  label="已暂停"
-                  sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                />
-              </Badge>
-              <Tooltip title={wsConnected ? '实时连接正常' : '连接断开'}>
-                <Chip
-                  icon={wsConnected ? <CheckCircleIcon /> : <WarningIcon />}
-                  label={wsConnected ? '实时' : '离线'}
-                  color={wsConnected ? 'success' : 'default'}
-                  size="small"
-                  sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }}
-                />
-              </Tooltip>
-              <Button
-                variant="contained"
-                color="inherit"
-                startIcon={<SettingsIcon />}
-                onClick={() => setSettingsDialog(true)}
-                sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}
-              >
-                全局设置
-              </Button>
-              <IconButton onClick={loadPositions} sx={{ color: 'white' }}>
-                <RefreshIcon />
-              </IconButton>
-            </Stack>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Portfolio Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                总市值
-              </Typography>
-              <Typography variant="h5" fontWeight="bold">
-                ${totalMarketValue.toFixed(2)}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                成本: ${totalCost.toFixed(2)}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={1}>
-                {totalPnl >= 0 ? <TrendingUpIcon color="success" /> : <TrendingDownIcon color="error" />}
-                <Typography color="text.secondary" gutterBottom>
-                  总盈亏
-                </Typography>
-              </Stack>
-              <Typography variant="h5" fontWeight="bold" color={totalPnl >= 0 ? 'success.main' : 'error.main'}>
-                {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
-              </Typography>
-              <Typography variant="caption" color={totalPnl >= 0 ? 'success.main' : 'error.main'}>
-                {totalPnl >= 0 ? '+' : ''}{(totalPnlRatio * 100).toFixed(2)}%
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                持仓数量
-              </Typography>
-              <Typography variant="h5" fontWeight="bold">
-                {positions.length}
-              </Typography>
-              <Typography variant="caption" color="success.main">
-                监控中: {positions.filter(p => p.monitoring_status === 'active').length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                最后更新
-              </Typography>
-              <Typography variant="h6">
-                {lastUpdate ? lastUpdate.toLocaleTimeString() : '--:--:--'}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {wsConnected ? '实时推送中' : '等待连接...'}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <Box sx={{ mb: 2 }}>
-          {notifications.slice(0, 3).map((notif) => (
-            <Alert
-              key={notif.id}
-              severity={notif.type}
-              icon={<NotificationsActiveIcon />}
-              sx={{ mb: 1 }}
-              onClose={() => setNotifications((prev) => prev.filter((n) => n.id !== notif.id))}
-            >
-              <Typography variant="body2">{notif.message}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                {notif.timestamp.toLocaleTimeString()}
-              </Typography>
-            </Alert>
-          ))}
-        </Box>
-      )}
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="持仓监控管理"
+        description="为每个持仓配置个性化的监控策略"
+        icon={<Visibility />}
+        actions={
+          <div className="flex items-center gap-3">
+            <Badge variant={wsConnected ? "success" : "default"}>
+              {wsConnected ? "● 实时" : "○ 离线"}
+            </Badge>
+            <span className="text-sm text-slate-500">监控中: {activeCount}</span>
+            <Button variant="secondary" onClick={() => setShowSettings(true)} icon={<Settings className="w-4 h-4" />}>
+              全局设置
+            </Button>
+            <Button variant="ghost" onClick={loadPositions} icon={<Refresh className="w-4 h-4" />}>
+              刷新
+            </Button>
+          </div>
+        }
+      />
 
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+        <Alert type="error" onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
+      {success && (
+        <Alert type="success" onClose={() => setSuccess(null)}>
+          {success}
+        </Alert>
+      )}
 
-      {/* Batch Actions */}
+      {/* 统计卡片 */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard label="总市值" value={`$${totalMarketValue.toFixed(2)}`} subtext={`成本: $${totalCost.toFixed(2)}`} />
+        <StatCard
+          label="总盈亏"
+          value={`${totalPnl >= 0 ? "+" : ""}$${totalPnl.toFixed(2)}`}
+          subtext={`${totalPnl >= 0 ? "+" : ""}${(totalPnlRatio * 100).toFixed(2)}%`}
+          color={totalPnl >= 0 ? "emerald" : "red"}
+          icon={totalPnl >= 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+        />
+        <StatCard label="持仓数量" value={positions.length.toString()} subtext={`监控中: ${activeCount}`} />
+        <StatCard
+          label="最后更新"
+          value={lastUpdate ? lastUpdate.toLocaleTimeString() : "--:--:--"}
+          subtext={wsConnected ? "实时推送中" : "等待连接..."}
+        />
+      </div>
+
+      {/* 批量操作 */}
       {selectedPositions.size > 0 && (
-        <Card sx={{ mb: 2, p: 2 }}>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Typography>
-              已选择 {selectedPositions.size} 个持仓
-            </Typography>
-            <Button
-              size="small"
-              color="success"
-              onClick={() => batchUpdateMonitoring('active')}
-              startIcon={<PlayIcon />}
-            >
+        <Card>
+          <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-600 dark:text-slate-400">已选择 {selectedPositions.size} 个持仓</span>
+            <Button size="sm" variant="success" onClick={() => batchUpdateMonitoring("active")} icon={<PlayArrow className="w-4 h-4" />}>
               启用监控
             </Button>
-            <Button
-              size="small"
-              color="warning"
-              onClick={() => batchUpdateMonitoring('paused')}
-              startIcon={<PauseIcon />}
-            >
+            <Button size="sm" variant="warning" onClick={() => batchUpdateMonitoring("paused")} icon={<Pause className="w-4 h-4" />}>
               暂停监控
             </Button>
-            <Button
-              size="small"
-              color="error"
-              onClick={() => batchUpdateMonitoring('excluded')}
-              startIcon={<BlockIcon />}
-            >
+            <Button size="sm" variant="danger" onClick={() => batchUpdateMonitoring("excluded")} icon={<Block className="w-4 h-4" />}>
               排除监控
             </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setSelectedPositions(new Set())}
-            >
+            <Button size="sm" variant="ghost" onClick={() => setSelectedPositions(new Set())}>
               清除选择
             </Button>
-          </Stack>
+          </div>
         </Card>
       )}
 
-      {/* Positions Table */}
-      <TableContainer component={Paper}>
-        <Table>
-          <TableHead>
-            <TableRow>
-              <TableCell padding="checkbox">
-                <Checkbox
-                  checked={selectedPositions.size === positions.length}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setSelectedPositions(new Set(positions.map(p => p.symbol)));
-                    } else {
-                      setSelectedPositions(new Set());
-                    }
-                  }}
-                />
-              </TableCell>
-              <TableCell>股票</TableCell>
-              <TableCell>状态</TableCell>
-              <TableCell>策略模式</TableCell>
-              <TableCell align="right">持仓</TableCell>
-              <TableCell align="right">成本</TableCell>
-              <TableCell align="right">现价</TableCell>
-              <TableCell align="right">盈亏</TableCell>
-              <TableCell align="right">止损/止盈</TableCell>
-              <TableCell>启用策略</TableCell>
-              <TableCell>操作</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {positions.map((position) => {
-              const isSelected = selectedPositions.has(position.symbol);
-              const isActive = position.monitoring_status === 'active';
-              const flash = priceFlash[position.symbol];
-
-              return (
-                <TableRow
-                  key={position.symbol}
-                  selected={isSelected}
-                  sx={{
-                    opacity: position.monitoring_status === 'excluded' ? 0.5 : 1,
-                    backgroundColor: flash === 'up' 
-                      ? 'rgba(76, 175, 80, 0.1)' 
-                      : flash === 'down' 
-                      ? 'rgba(244, 67, 54, 0.1)' 
-                      : undefined,
-                    transition: 'background-color 0.5s ease',
-                  }}
-                >
-                  <TableCell padding="checkbox">
-                    <Checkbox
-                      checked={isSelected}
-                      onChange={(e) => {
-                        const newSelected = new Set(selectedPositions);
-                        if (e.target.checked) {
-                          newSelected.add(position.symbol);
-                        } else {
-                          newSelected.delete(position.symbol);
-                        }
-                        setSelectedPositions(newSelected);
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      {getStatusIcon(position.monitoring_status)}
-                      <Box>
-                        <Typography fontWeight="bold">{position.symbol}</Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {position.name}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Switch
-                      checked={isActive}
-                      onChange={(e) => toggleMonitoring(position.symbol, e.target.checked)}
-                      disabled={position.monitoring_status === 'excluded'}
-                    />
-                  </TableCell>
-                  <TableCell>{getStrategyModeChip(position.strategy_mode)}</TableCell>
-                  <TableCell align="right">{position.quantity}</TableCell>
-                  <TableCell align="right">{position.avg_cost.toFixed(2)}</TableCell>
-                  <TableCell align="right">{position.current_price.toFixed(2)}</TableCell>
-                  <TableCell align="right">
-                    <Stack alignItems="flex-end">
-                      <Typography
-                        color={position.pnl >= 0 ? 'success.main' : 'error.main'}
-                        fontWeight="bold"
-                      >
-                        {position.pnl >= 0 ? '+' : ''}{position.pnl.toFixed(2)}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        color={position.pnl_ratio >= 0 ? 'success.main' : 'error.main'}
-                      >
-                        {position.pnl_ratio >= 0 ? '+' : ''}{(position.pnl_ratio * 100).toFixed(2)}%
-                      </Typography>
-                    </Stack>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Stack>
-                      <Typography variant="caption" color="error.main">
-                        -{((position.custom_stop_loss || globalSettings?.global_stop_loss || 0.05) * 100).toFixed(0)}%
-                      </Typography>
-                      <Typography variant="caption" color="success.main">
-                        +{((position.custom_take_profit || globalSettings?.global_take_profit || 0.15) * 100).toFixed(0)}%
-                      </Typography>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={0.5}>
-                      {position.enabled_strategies.map((strategyId) => {
-                        const strategy = AVAILABLE_STRATEGIES.find(s => s.id === strategyId);
-                        return (
-                          <Tooltip key={strategyId} title={strategy?.description || strategyId}>
-                            <Chip label={strategy?.name || strategyId} size="small" />
-                          </Tooltip>
-                        );
-                      })}
-                      {position.enabled_strategies.length === 0 && (
-                        <Typography variant="caption" color="text.secondary">无</Typography>
-                      )}
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Stack direction="row" spacing={1}>
-                      <IconButton
-                        size="small"
-                        onClick={() => setEditDialog({ open: true, position })}
-                      >
-                        <SettingsIcon fontSize="small" />
-                      </IconButton>
-                      {position.monitoring_status !== 'excluded' && (
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => excludePosition(position.symbol)}
-                        >
-                          <BlockIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Stack>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
-      </TableContainer>
-
-      {/* Edit Position Dialog */}
-      <Dialog
-        open={editDialog.open}
-        onClose={() => setEditDialog({ open: false, position: null })}
-        maxWidth="md"
-        fullWidth
-      >
-        {editDialog.position && (
-          <>
-            <DialogTitle>
-              编辑监控设置: {editDialog.position.symbol} - {editDialog.position.name}
-            </DialogTitle>
-            <DialogContent>
-              <Grid container spacing={3} sx={{ mt: 1 }}>
-                <Grid item xs={12}>
-                  <FormControl fullWidth>
-                    <InputLabel>策略模式</InputLabel>
-                    <Select
-                      value={editDialog.position.strategy_mode}
-                      label="策略模式"
-                      onChange={(e) => {
-                        setEditDialog({
-                          ...editDialog,
-                          position: {
-                            ...editDialog.position!,
-                            strategy_mode: e.target.value,
-                          },
-                        });
-                      }}
-                    >
-                      <MenuItem value="auto">自动执行</MenuItem>
-                      <MenuItem value="alert_only">仅提醒</MenuItem>
-                      <MenuItem value="disabled">禁用</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Typography gutterBottom>启用的策略</Typography>
-                  <FormGroup>
-                    {AVAILABLE_STRATEGIES.map((strategy) => (
-                      <FormControlLabel
-                        key={strategy.id}
-                        control={
-                          <Checkbox
-                            checked={editDialog.position.enabled_strategies.includes(strategy.id)}
-                            onChange={(e) => {
-                              const strategies = [...editDialog.position!.enabled_strategies];
-                              if (e.target.checked) {
-                                strategies.push(strategy.id);
-                              } else {
-                                const index = strategies.indexOf(strategy.id);
-                                if (index > -1) strategies.splice(index, 1);
-                              }
-                              setEditDialog({
-                                ...editDialog,
-                                position: {
-                                  ...editDialog.position!,
-                                  enabled_strategies: strategies,
-                                },
-                              });
-                            }}
-                          />
-                        }
-                        label={
-                          <Box>
-                            <Typography>{strategy.name}</Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {strategy.description}
-                            </Typography>
-                          </Box>
-                        }
-                      />
-                    ))}
-                  </FormGroup>
-                </Grid>
-
-                <Grid item xs={6}>
-                  <Typography gutterBottom>
-                    自定义止损 (留空使用全局设置)
-                  </Typography>
-                  <Slider
-                    value={(editDialog.position.custom_stop_loss || 0) * 100}
-                    onChange={(_, value) => {
-                      setEditDialog({
-                        ...editDialog,
-                        position: {
-                          ...editDialog.position!,
-                          custom_stop_loss: (value as number) / 100,
-                        },
-                      });
-                    }}
-                    min={0}
-                    max={20}
-                    step={1}
-                    marks
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
-                  />
-                </Grid>
-
-                <Grid item xs={6}>
-                  <Typography gutterBottom>
-                    自定义止盈 (留空使用全局设置)
-                  </Typography>
-                  <Slider
-                    value={(editDialog.position.custom_take_profit || 0) * 100}
-                    onChange={(_, value) => {
-                      setEditDialog({
-                        ...editDialog,
-                        position: {
-                          ...editDialog.position!,
-                          custom_take_profit: (value as number) / 100,
-                        },
-                      });
-                    }}
-                    min={0}
-                    max={50}
-                    step={1}
-                    marks
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
-                  />
-                </Grid>
-
-                <Grid item xs={12}>
-                  <TextField
-                    fullWidth
-                    label="备注"
-                    multiline
-                    rows={2}
-                    value={editDialog.position.notes || ''}
+      {/* 持仓表格 */}
+      <Card padding="none">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                <th className="text-left py-3 px-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedPositions.size === positions.length && positions.length > 0}
                     onChange={(e) => {
-                      setEditDialog({
-                        ...editDialog,
-                        position: {
-                          ...editDialog.position!,
-                          notes: e.target.value,
-                        },
-                      });
+                      if (e.target.checked) {
+                        setSelectedPositions(new Set(positions.map((p) => p.symbol)));
+                      } else {
+                        setSelectedPositions(new Set());
+                      }
                     }}
+                    className="rounded border-slate-300"
                   />
-                </Grid>
-              </Grid>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setEditDialog({ open: false, position: null })}>
+                </th>
+                <th className="text-left py-3 px-4 font-medium text-slate-500">股票</th>
+                <th className="text-center py-3 px-4 font-medium text-slate-500">状态</th>
+                <th className="text-center py-3 px-4 font-medium text-slate-500">策略模式</th>
+                <th className="text-right py-3 px-4 font-medium text-slate-500">持仓</th>
+                <th className="text-right py-3 px-4 font-medium text-slate-500">成本</th>
+                <th className="text-right py-3 px-4 font-medium text-slate-500">现价</th>
+                <th className="text-right py-3 px-4 font-medium text-slate-500">盈亏</th>
+                <th className="text-center py-3 px-4 font-medium text-slate-500">止损/止盈</th>
+                <th className="text-left py-3 px-4 font-medium text-slate-500">启用策略</th>
+                <th className="text-center py-3 px-4 font-medium text-slate-500">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {positions.map((position) => {
+                const isSelected = selectedPositions.has(position.symbol);
+                const isActive = position.monitoring_status === "active";
+                const flash = priceFlash[position.symbol];
+                const isExcluded = position.monitoring_status === "excluded";
+
+                return (
+                  <tr
+                    key={position.symbol}
+                    className={`border-b border-slate-100 dark:border-slate-700/50 transition-colors ${
+                      flash === "up"
+                        ? "bg-emerald-50 dark:bg-emerald-900/10"
+                        : flash === "down"
+                          ? "bg-red-50 dark:bg-red-900/10"
+                          : "hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    } ${isExcluded ? "opacity-50" : ""}`}
+                  >
+                    <td className="py-3 px-4">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={(e) => {
+                          const newSelected = new Set(selectedPositions);
+                          if (e.target.checked) {
+                            newSelected.add(position.symbol);
+                          } else {
+                            newSelected.delete(position.symbol);
+                          }
+                          setSelectedPositions(newSelected);
+                        }}
+                        className="rounded border-slate-300"
+                      />
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        {isActive ? (
+                          <CheckCircle className="w-4 h-4 text-emerald-500" />
+                        ) : isExcluded ? (
+                          <Block className="w-4 h-4 text-red-500" />
+                        ) : (
+                          <Pause className="w-4 h-4 text-amber-500" />
+                        )}
+                        <div>
+                          <div className="font-medium text-slate-900 dark:text-white">{position.symbol}</div>
+                          <div className="text-xs text-slate-500">{position.name}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <button
+                        onClick={() => toggleMonitoring(position.symbol, !isActive)}
+                        disabled={isExcluded}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                          isActive ? "bg-cyan-500" : "bg-slate-300 dark:bg-slate-600"
+                        } ${isExcluded ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                            isActive ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <span
+                        className={`text-xs px-2 py-1 rounded font-medium ${
+                          position.strategy_mode === "auto"
+                            ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                            : position.strategy_mode === "alert_only"
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                              : "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400"
+                        }`}
+                      >
+                        {position.strategy_mode === "auto" ? "自动执行" : position.strategy_mode === "alert_only" ? "仅提醒" : "禁用"}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">{position.quantity}</td>
+                    <td className="py-3 px-4 text-right">${position.avg_cost.toFixed(2)}</td>
+                    <td className="py-3 px-4 text-right font-medium">${position.current_price.toFixed(2)}</td>
+                    <td className="py-3 px-4 text-right">
+                      <div className={position.pnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}>
+                        <div className="font-medium">
+                          {position.pnl >= 0 ? "+" : ""}${position.pnl.toFixed(2)}
+                        </div>
+                        <div className="text-xs">
+                          {position.pnl_ratio >= 0 ? "+" : ""}
+                          {(position.pnl_ratio * 100).toFixed(2)}%
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="text-xs">
+                        <span className="text-red-500">
+                          -{((position.custom_stop_loss || globalSettings?.global_stop_loss || 0.05) * 100).toFixed(0)}%
+                        </span>
+                        <span className="text-slate-400 mx-1">/</span>
+                        <span className="text-emerald-500">
+                          +{((position.custom_take_profit || globalSettings?.global_take_profit || 0.15) * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <div className="flex flex-wrap gap-1">
+                        {position.enabled_strategies.slice(0, 2).map((strategyId) => {
+                          const strategy = AVAILABLE_STRATEGIES.find((s) => s.id === strategyId);
+                          return (
+                            <span
+                              key={strategyId}
+                              className="text-xs px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 rounded text-slate-600 dark:text-slate-400"
+                            >
+                              {strategy?.name || strategyId}
+                            </span>
+                          );
+                        })}
+                        {position.enabled_strategies.length > 2 && (
+                          <span className="text-xs text-slate-400">+{position.enabled_strategies.length - 2}</span>
+                        )}
+                        {position.enabled_strategies.length === 0 && <span className="text-xs text-slate-400">无</span>}
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button size="sm" variant="ghost" onClick={() => setEditPosition(position)}>
+                          <Settings className="w-4 h-4" />
+                        </Button>
+                        {!isExcluded && (
+                          <Button size="sm" variant="ghost" onClick={() => excludePosition(position.symbol)}>
+                            <Block className="w-4 h-4 text-red-500" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        {positions.length === 0 && (
+          <EmptyState title="暂无持仓" description="请先买入股票或检查 API 配置" icon={<Visibility />} />
+        )}
+      </Card>
+
+      {/* 编辑持仓对话框 */}
+      {editPosition && (
+        <Dialog
+          title={`编辑监控: ${editPosition.symbol}`}
+          onClose={() => setEditPosition(null)}
+          size="lg"
+        >
+          <div className="space-y-6">
+            <Select
+              label="策略模式"
+              value={editPosition.strategy_mode}
+              onChange={(e) => setEditPosition({ ...editPosition, strategy_mode: e.target.value })}
+              options={[
+                { value: "auto", label: "自动执行" },
+                { value: "alert_only", label: "仅提醒" },
+                { value: "disabled", label: "禁用" },
+              ]}
+            />
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">启用的策略</label>
+              <div className="space-y-2">
+                {AVAILABLE_STRATEGIES.map((strategy) => (
+                  <label key={strategy.id} className="flex items-start gap-3 p-2 rounded hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editPosition.enabled_strategies.includes(strategy.id)}
+                      onChange={(e) => {
+                        const strategies = [...editPosition.enabled_strategies];
+                        if (e.target.checked) {
+                          strategies.push(strategy.id);
+                        } else {
+                          const index = strategies.indexOf(strategy.id);
+                          if (index > -1) strategies.splice(index, 1);
+                        }
+                        setEditPosition({ ...editPosition, enabled_strategies: strategies });
+                      }}
+                      className="mt-1 rounded border-slate-300"
+                    />
+                    <div>
+                      <div className="font-medium text-slate-900 dark:text-white">{strategy.name}</div>
+                      <div className="text-sm text-slate-500">{strategy.description}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  自定义止损: {((editPosition.custom_stop_loss || 0) * 100).toFixed(0)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="20"
+                  step="1"
+                  value={(editPosition.custom_stop_loss || 0) * 100}
+                  onChange={(e) => setEditPosition({ ...editPosition, custom_stop_loss: Number(e.target.value) / 100 })}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  自定义止盈: {((editPosition.custom_take_profit || 0) * 100).toFixed(0)}%
+                </label>
+                <input
+                  type="range"
+                  min="0"
+                  max="50"
+                  step="1"
+                  value={(editPosition.custom_take_profit || 0) * 100}
+                  onChange={(e) => setEditPosition({ ...editPosition, custom_take_profit: Number(e.target.value) / 100 })}
+                  className="w-full"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">备注</label>
+              <textarea
+                value={editPosition.notes || ""}
+                onChange={(e) => setEditPosition({ ...editPosition, notes: e.target.value })}
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600
+                  bg-white dark:bg-slate-900 text-slate-900 dark:text-white text-sm
+                  focus:outline-none focus:ring-2 focus:ring-cyan-500/50 resize-none"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <Button variant="secondary" onClick={() => setEditPosition(null)} className="flex-1">
                 取消
               </Button>
               <Button
-                variant="contained"
-                onClick={() => {
-                  updatePositionMonitoring(editDialog.position!.symbol, {
-                    strategy_mode: editDialog.position!.strategy_mode,
-                    enabled_strategies: editDialog.position!.enabled_strategies,
-                    custom_stop_loss: editDialog.position!.custom_stop_loss || null,
-                    custom_take_profit: editDialog.position!.custom_take_profit || null,
-                    notes: editDialog.position!.notes,
-                  });
-                }}
+                onClick={() =>
+                  updatePositionMonitoring(editPosition.symbol, {
+                    strategy_mode: editPosition.strategy_mode,
+                    enabled_strategies: editPosition.enabled_strategies,
+                    custom_stop_loss: editPosition.custom_stop_loss || null,
+                    custom_take_profit: editPosition.custom_take_profit || null,
+                    notes: editPosition.notes,
+                  })
+                }
+                className="flex-1"
               >
                 保存
               </Button>
-            </DialogActions>
-          </>
-        )}
-      </Dialog>
+            </div>
+          </div>
+        </Dialog>
+      )}
 
-      {/* Global Settings Dialog */}
-      <Dialog
-        open={settingsDialog}
-        onClose={() => setSettingsDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        {globalSettings && (
-          <>
-            <DialogTitle>全局监控设置</DialogTitle>
-            <DialogContent>
-              <Stack spacing={3} sx={{ mt: 2 }}>
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={globalSettings.auto_monitor_new_positions}
-                      onChange={(e) => {
-                        setGlobalSettings({
-                          ...globalSettings,
-                          auto_monitor_new_positions: e.target.checked,
-                        });
-                      }}
-                    />
-                  }
-                  label="自动监控新持仓"
-                />
+      {/* 全局设置对话框 */}
+      {showSettings && globalSettings && (
+        <Dialog title="全局监控设置" onClose={() => setShowSettings(false)}>
+          <div className="space-y-6">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={globalSettings.auto_monitor_new_positions}
+                onChange={(e) => setGlobalSettings({ ...globalSettings, auto_monitor_new_positions: e.target.checked })}
+                className="rounded border-slate-300"
+              />
+              <span className="text-sm text-slate-700 dark:text-slate-300">自动监控新持仓</span>
+            </label>
 
-                <Box>
-                  <Typography gutterBottom>全局止损 ({(globalSettings.global_stop_loss * 100).toFixed(0)}%)</Typography>
-                  <Slider
-                    value={globalSettings.global_stop_loss * 100}
-                    onChange={(_, value) => {
-                      setGlobalSettings({
-                        ...globalSettings,
-                        global_stop_loss: (value as number) / 100,
-                      });
-                    }}
-                    min={1}
-                    max={20}
-                    step={1}
-                    marks
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
-                  />
-                </Box>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                全局止损: {(globalSettings.global_stop_loss * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="1"
+                max="20"
+                step="1"
+                value={globalSettings.global_stop_loss * 100}
+                onChange={(e) => setGlobalSettings({ ...globalSettings, global_stop_loss: Number(e.target.value) / 100 })}
+                className="w-full"
+              />
+            </div>
 
-                <Box>
-                  <Typography gutterBottom>全局止盈 ({(globalSettings.global_take_profit * 100).toFixed(0)}%)</Typography>
-                  <Slider
-                    value={globalSettings.global_take_profit * 100}
-                    onChange={(_, value) => {
-                      setGlobalSettings({
-                        ...globalSettings,
-                        global_take_profit: (value as number) / 100,
-                      });
-                    }}
-                    min={5}
-                    max={50}
-                    step={1}
-                    marks
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
-                  />
-                </Box>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                全局止盈: {(globalSettings.global_take_profit * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="50"
+                step="1"
+                value={globalSettings.global_take_profit * 100}
+                onChange={(e) => setGlobalSettings({ ...globalSettings, global_take_profit: Number(e.target.value) / 100 })}
+                className="w-full"
+              />
+            </div>
 
-                <Box>
-                  <Typography gutterBottom>单日最大亏损 ({(globalSettings.max_daily_loss * 100).toFixed(0)}%)</Typography>
-                  <Slider
-                    value={globalSettings.max_daily_loss * 100}
-                    onChange={(_, value) => {
-                      setGlobalSettings({
-                        ...globalSettings,
-                        max_daily_loss: (value as number) / 100,
-                      });
-                    }}
-                    min={5}
-                    max={30}
-                    step={1}
-                    marks
-                    valueLabelDisplay="auto"
-                    valueLabelFormat={(value) => `${value}%`}
-                  />
-                </Box>
-              </Stack>
-            </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setSettingsDialog(false)}>取消</Button>
-              <Button
-                variant="contained"
-                onClick={() => updateGlobalSettings(globalSettings)}
-              >
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                单日最大亏损: {(globalSettings.max_daily_loss * 100).toFixed(0)}%
+              </label>
+              <input
+                type="range"
+                min="5"
+                max="30"
+                step="1"
+                value={globalSettings.max_daily_loss * 100}
+                onChange={(e) => setGlobalSettings({ ...globalSettings, max_daily_loss: Number(e.target.value) / 100 })}
+                className="w-full"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
+              <Button variant="secondary" onClick={() => setShowSettings(false)} className="flex-1">
+                取消
+              </Button>
+              <Button onClick={() => updateGlobalSettings(globalSettings)} className="flex-1">
                 保存设置
               </Button>
-            </DialogActions>
-          </>
-        )}
-      </Dialog>
-    </Box>
+            </div>
+          </div>
+        </Dialog>
+      )}
+    </div>
+  );
+}
+
+// 统计卡片
+function StatCard({
+  label,
+  value,
+  subtext,
+  icon,
+  color,
+}: {
+  label: string;
+  value: string;
+  subtext?: string;
+  icon?: React.ReactNode;
+  color?: "emerald" | "red";
+}) {
+  const colorClasses = {
+    emerald: "text-emerald-600 dark:text-emerald-400",
+    red: "text-red-600 dark:text-red-400",
+  };
+
+  return (
+    <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{label}</p>
+          <p className={`text-xl font-bold ${color ? colorClasses[color] : "text-slate-900 dark:text-white"}`}>{value}</p>
+          {subtext && <p className={`text-xs ${color ? colorClasses[color] : "text-slate-500"}`}>{subtext}</p>}
+        </div>
+        {icon && <span className={color ? colorClasses[color] : "text-slate-400"}>{icon}</span>}
+      </div>
+    </div>
+  );
+}
+
+// 对话框组件
+function Dialog({
+  title,
+  children,
+  onClose,
+  size = "md",
+}: {
+  title: string;
+  children: React.ReactNode;
+  onClose: () => void;
+  size?: "md" | "lg";
+}) {
+  const sizeClasses = { md: "max-w-md", lg: "max-w-2xl" };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className={`bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full ${sizeClasses[size]} max-h-[90vh] overflow-y-auto`}>
+        <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-700">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white">{title}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-colors">
+            <Close className="w-5 h-5 text-slate-500" />
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
   );
 }

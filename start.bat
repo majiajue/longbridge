@@ -98,7 +98,16 @@ if not exist "backend\.env" (
   echo OK: backend\.env exists
 )
 
-if not exist "backend\.venv\.deps_installed" (
+set "NEED_BACKEND_DEPS=1"
+if exist "backend\.venv\.deps_installed" (
+  where powershell >nul 2>&1
+  if not errorlevel 1 (
+    powershell -NoProfile -Command "if ((Get-Item 'backend\\pyproject.toml').LastWriteTime -le (Get-Item 'backend\\.venv\\.deps_installed').LastWriteTime) { exit 0 } else { exit 1 }" >nul 2>&1
+    if not errorlevel 1 set "NEED_BACKEND_DEPS=0"
+  )
+)
+
+if "%NEED_BACKEND_DEPS%"=="1" (
   echo - Installing backend dependencies...
   pushd backend
   call .venv\Scripts\python.exe -m pip install -U pip

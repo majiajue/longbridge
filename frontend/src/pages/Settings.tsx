@@ -1,6 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Key,
+  SmartToy,
+  FormatListBulleted,
+  Timeline,
+  Save,
+  Verified,
+  Sync,
+  Visibility,
+} from "@mui/icons-material";
 import StatusSnackbar from "../components/StatusSnackbar";
 import ErrorDialog from "../components/ErrorDialog";
+import {
+  PageHeader,
+  Card,
+  CardHeader,
+  Button,
+  Input,
+  Select,
+  Badge,
+  Alert,
+  LoadingSpinner,
+} from "../components/ui";
 import {
   Credentials,
   AICredentials,
@@ -26,7 +47,7 @@ const EMPTY_CREDS: Credentials = {
 const EMPTY_AI_CREDS: AICredentials = {
   DEEPSEEK_API_KEY: "",
   TAVILY_API_KEY: "",
-  EODHD_API_KEY: "",  // 板块数据 API
+  EODHD_API_KEY: "",
 };
 
 const PERIOD_OPTIONS = [
@@ -66,10 +87,11 @@ export default function SettingsPage() {
     message: string;
     severity: "success" | "info" | "warning" | "error";
   }>({ open: false, message: "", severity: "info" });
-  const [errorDialog, setErrorDialog] = useState<{ open: boolean; error: Error | APIError | null; title?: string }>({
-    open: false,
-    error: null,
-  });
+  const [errorDialog, setErrorDialog] = useState<{
+    open: boolean;
+    error: Error | APIError | null;
+    title?: string;
+  }>({ open: false, error: null });
 
   useEffect(() => {
     async function bootstrap() {
@@ -107,21 +129,15 @@ export default function SettingsPage() {
     [symbols]
   );
 
-  const handleCredChange = (key: keyof Credentials) =>
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCredChange =
+    (key: keyof Credentials) => (event: React.ChangeEvent<HTMLInputElement>) => {
       setCredentials((prev) => ({ ...prev, [key]: event.target.value }));
     };
 
-  const handleAICredChange = (key: keyof AICredentials) =>
-    (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAICredChange =
+    (key: keyof AICredentials) => (event: React.ChangeEvent<HTMLInputElement>) => {
       setAICredentials((prev) => ({ ...prev, [key]: event.target.value }));
     };
-
-  const handleSymbolsChange = (
-    event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
-  ) => {
-    setSymbols(event.target.value);
-  };
 
   const handleCredSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -151,9 +167,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSymbolSubmit = async (
-    event: React.FormEvent<HTMLFormElement>
-  ) => {
+  const handleSymbolSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
       const list = parsedSymbols;
@@ -186,19 +200,10 @@ export default function SettingsPage() {
         severity: "success",
       });
     } catch (error) {
-      // 使用新的错误对话框显示详细错误信息
       if (error instanceof APIError || error instanceof Error) {
-        setErrorDialog({
-          open: true,
-          error,
-          title: "凭据验证失败"
-        });
+        setErrorDialog({ open: true, error, title: "凭据验证失败" });
       } else {
-        setSnackbar({
-          open: true,
-          message: "验证失败",
-          severity: "error",
-        });
+        setSnackbar({ open: true, message: "验证失败", severity: "error" });
       }
     } finally {
       setVerifying(false);
@@ -236,11 +241,7 @@ export default function SettingsPage() {
 
   const handleHistoryFetch = async () => {
     if (!selectedSymbol) {
-      setSnackbar({
-        open: true,
-        message: "请先配置股票代码",
-        severity: "warning",
-      });
+      setSnackbar({ open: true, message: "请先配置股票代码", severity: "warning" });
       return;
     }
     setHistoryLoading(true);
@@ -269,314 +270,258 @@ export default function SettingsPage() {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
+    return <LoadingSpinner size="lg" text="加载配置中..." />;
   }
 
   return (
-    <div className="space-y-6 animate-slide-up">
-      {/* Credentials Configuration */}
-      <div className="card p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          Longbridge 凭据配置
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          请填写从 Longbridge 开发者平台注册获得的凭据，仅存储在本地 DuckDB。
-        </p>
-        <form onSubmit={handleCredSubmit} className="space-y-4">
-          <div>
-            <label className="label">LONGPORT_APP_KEY</label>
-            <input
+    <div className="space-y-6 animate-fade-in">
+      <PageHeader
+        title="基础配置"
+        description="管理 API 凭据、股票列表和历史数据同步"
+        icon={<Key />}
+      />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Longbridge Credentials */}
+        <Card>
+          <CardHeader
+            title="Longbridge 凭据"
+            description="从 Longbridge 开发者平台获取"
+            icon={<Key className="w-5 h-5" />}
+            action={
+              <Badge variant="info" dot>
+                本地加密存储
+              </Badge>
+            }
+          />
+          <form onSubmit={handleCredSubmit} className="space-y-4">
+            <Input
+              label="APP KEY"
               type="text"
-              className="input-field"
               value={credentials.LONGPORT_APP_KEY}
               onChange={handleCredChange("LONGPORT_APP_KEY")}
-              required
               placeholder="输入你的 APP KEY"
+              required
             />
-          </div>
-          <div>
-            <label className="label">LONGPORT_APP_SECRET</label>
-            <input
+            <Input
+              label="APP SECRET"
               type="password"
-              className="input-field"
               value={credentials.LONGPORT_APP_SECRET}
               onChange={handleCredChange("LONGPORT_APP_SECRET")}
-              required
               placeholder="输入你的 APP SECRET"
+              required
             />
-          </div>
-          <div>
-            <label className="label">LONGPORT_ACCESS_TOKEN</label>
-            <input
+            <Input
+              label="ACCESS TOKEN"
               type="password"
-              className="input-field"
               value={credentials.LONGPORT_ACCESS_TOKEN}
               onChange={handleCredChange("LONGPORT_ACCESS_TOKEN")}
-              required
               placeholder="输入你的 ACCESS TOKEN"
+              required
             />
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button type="submit" className="btn-primary">
-              💾 保存凭据
-            </button>
-            <button
-              type="button"
-              className="btn-secondary"
-              onClick={handleVerify}
-              disabled={verifying}
-            >
-              {verifying ? "验证中..." : "🔍 验证凭据与行情"}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* AI Credentials Configuration */}
-      <div className="card p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          AI 配置
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          配置 AI 服务的 API Key，用于 AI 分析、自动交易和新闻舆情分析功能。
-        </p>
-        <form onSubmit={handleAICredSubmit} className="space-y-4">
-          <div>
-            <label className="label">DeepSeek API Key</label>
-            <input
-              type="password"
-              className="input-field"
-              value={aiCredentials.DEEPSEEK_API_KEY}
-              onChange={handleAICredChange("DEEPSEEK_API_KEY")}
-              placeholder="输入你的 DeepSeek API Key"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              获取 API Key：<a 
-                href="https://platform.deepseek.com/api_keys" 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="text-primary-600 dark:text-primary-400 hover:underline"
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" icon={<Save className="w-4 h-4" />}>
+                保存凭据
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleVerify}
+                loading={verifying}
+                icon={<Verified className="w-4 h-4" />}
               >
-                https://platform.deepseek.com/api_keys
-              </a>
-            </p>
-          </div>
-          
-          {/* ⬆️ 新增Tavily配置 */}
-          <div>
-            <label className="label">
-              Tavily API Key
-              <span className="ml-2 text-xs font-normal text-primary-600 dark:text-primary-400">
-                🔍 新闻舆情分析（V3.0新增）
-              </span>
-            </label>
-            <input
-              type="password"
-              className="input-field"
-              value={aiCredentials.TAVILY_API_KEY || ""}
-              onChange={handleAICredChange("TAVILY_API_KEY")}
-              placeholder="输入你的 Tavily API Key（可选）"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              用于AI选股时搜索实时新闻和舆情分析，免费1000次/月。获取 API Key：
-              <a
-                href="https://tavily.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary-600 dark:text-primary-400 hover:underline ml-1"
-              >
-                https://tavily.com/
-              </a>
-            </p>
-            <div className="mt-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 p-2 rounded">
-              💡 提示：配置Tavily后，AI选股将结合实时新闻进行综合评分（新闻舆情20分，V3.1舆情增强版）
+                验证凭据
+              </Button>
             </div>
-          </div>
+          </form>
+        </Card>
 
-          {/* EODHD 板块数据 API */}
-          <div>
-            <label className="label">
-              EODHD API Key
-              <span className="ml-2 text-xs font-normal text-orange-600 dark:text-orange-400">
-                🔥 板块轮动分析
-              </span>
-            </label>
-            <input
-              type="password"
-              className="input-field"
-              value={aiCredentials.EODHD_API_KEY || ""}
-              onChange={handleAICredChange("EODHD_API_KEY")}
-              placeholder="输入你的 EODHD API Key（可选）"
-            />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              用于获取板块 ETF 数据和股票筛选，免费 20 次/天。获取 API Key：
-              <a
-                href="https://eodhd.com/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary-600 dark:text-primary-400 hover:underline ml-1"
-              >
-                https://eodhd.com/
-              </a>
-            </p>
-            <div className="mt-2 text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-900/20 p-2 rounded">
-              💡 提示：配置 EODHD 后，可使用"板块轮动"功能分析 11 个 SPDR 板块 ETF 并筛选强势股票
-            </div>
-          </div>
-
-          <div className="flex justify-end">
-            <button type="submit" className="btn-primary">
-              💾 保存 AI 配置
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* Stock List Configuration */}
-      <div className="card p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          股票列表配置
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          每行填写一只股票代码，如：`AAPL.US` 或 `700.HK`。
-        </p>
-        <form onSubmit={handleSymbolSubmit} className="space-y-4">
-          <div>
-            <label className="label">股票代码</label>
-            <textarea
-              className="input-field min-h-[150px] font-mono"
-              value={symbols}
-              onChange={handleSymbolsChange}
-              placeholder="AAPL.US\nTSLA.US\n700.HK"
-            />
-          </div>
-          <div className="flex justify-end">
-            <button type="submit" className="btn-primary">
-              📝 保存列表
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* History K-Line Sync and Preview */}
-      <div className="card p-6">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-          历史 K 线同步与预览
-        </h2>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          调用 Longbridge `history_candlesticks_by_offset` 接口同步数据至本地 DuckDB，并可查看拉取结果样例。
-        </p>
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* AI Credentials */}
+        <Card>
+          <CardHeader
+            title="AI 服务配置"
+            description="用于 AI 分析和新闻舆情功能"
+            icon={<SmartToy className="w-5 h-5" />}
+          />
+          <form onSubmit={handleAICredSubmit} className="space-y-4">
             <div>
-              <label className="label">周期</label>
-              <select
-                className="input-field"
-                value={historyPeriod}
-                onChange={(e) => setHistoryPeriod(e.target.value)}
-              >
-                {PERIOD_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">复权</label>
-              <select
-                className="input-field"
-                value={historyAdjust}
-                onChange={(e) => setHistoryAdjust(e.target.value)}
-              >
-                {ADJUST_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">数量</label>
-              <input
-                type="number"
-                className="input-field"
-                value={historyCount}
-                onChange={(e) => setHistoryCount(Number(e.target.value) || 0)}
-                min={1}
-                max={1000}
+              <Input
+                label="DeepSeek API Key"
+                type="password"
+                value={aiCredentials.DEEPSEEK_API_KEY}
+                onChange={handleAICredChange("DEEPSEEK_API_KEY")}
+                placeholder="输入 DeepSeek API Key"
+                hint={
+                  <a
+                    href="https://platform.deepseek.com/api_keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-cyan-600 dark:text-cyan-400 hover:underline"
+                  >
+                    获取 API Key
+                  </a>
+                }
               />
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label">预览股票</label>
-              <select
-                className="input-field"
-                value={selectedSymbol}
-                onChange={(e) => setSelectedSymbol(e.target.value)}
-              >
-                {symbolList.length === 0 ? (
-                  <option value="" disabled>
-                    请先保存股票列表
-                  </option>
-                ) : (
-                  symbolList.map((sym) => (
-                    <option key={sym} value={sym}>
-                      {sym}
-                    </option>
-                  ))
-                )}
-              </select>
+              <Input
+                label="Tavily API Key"
+                type="password"
+                value={aiCredentials.TAVILY_API_KEY || ""}
+                onChange={handleAICredChange("TAVILY_API_KEY")}
+                placeholder="输入 Tavily API Key（可选）"
+                hint="用于新闻舆情分析，免费 1000 次/月"
+              />
             </div>
-            <div className="flex items-end gap-3">
-              <button
-                className="btn-primary flex-1"
-                onClick={handleHistorySync}
-                disabled={historyLoading || parsedSymbols.length === 0}
-              >
-                {historyLoading ? "执行中..." : "🔄 同步历史数据"}
-              </button>
-              <button
-                className="btn-secondary flex-1"
-                onClick={handleHistoryFetch}
-                disabled={historyLoading || !selectedSymbol}
-              >
-                👁️ 预览最近数据
-              </button>
+            <div>
+              <Input
+                label="EODHD API Key"
+                type="password"
+                value={aiCredentials.EODHD_API_KEY || ""}
+                onChange={handleAICredChange("EODHD_API_KEY")}
+                placeholder="输入 EODHD API Key（可选）"
+                hint="用于板块轮动分析，免费 20 次/天"
+              />
             </div>
-          </div>
-
-          <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 max-h-64 overflow-y-auto border border-gray-200 dark:border-gray-700">
-            {historyBars.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400 text-sm">
-                暂无数据，点击"同步历史数据"并"预览最近数据"查看结果。
-              </p>
-            ) : (
-              <div className="space-y-2 font-mono text-sm">
-                {historyBars.slice(0, 20).map((bar) => (
-                  <div
-                    key={`${bar.ts}`}
-                    className="text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 p-1 rounded transition-colors"
-                  >
-                    <span className="font-semibold text-primary-600 dark:text-primary-400">
-                      {new Date(bar.ts).toLocaleString()}
-                    </span>
-                    <span className="ml-2">
-                      O:{bar.open ?? "-"} H:{bar.high ?? "-"} L:{bar.low ?? "-"} C:{bar.close ?? "-"} V:{bar.volume ?? "-"}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+            <div className="pt-2">
+              <Button type="submit" icon={<Save className="w-4 h-4" />}>
+                保存 AI 配置
+              </Button>
+            </div>
+          </form>
+        </Card>
       </div>
+
+      {/* Stock List */}
+      <Card>
+        <CardHeader
+          title="股票列表"
+          description="每行一个股票代码，如 AAPL.US 或 700.HK"
+          icon={<FormatListBulleted className="w-5 h-5" />}
+          action={
+            <Badge variant="default">{parsedSymbols.length} 只股票</Badge>
+          }
+        />
+        <form onSubmit={handleSymbolSubmit}>
+          <textarea
+            className="w-full h-40 px-4 py-3 rounded-lg border border-slate-300 dark:border-slate-600
+              bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono text-sm
+              focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:border-cyan-500
+              placeholder:text-slate-400 resize-none"
+            value={symbols}
+            onChange={(e) => setSymbols(e.target.value)}
+            placeholder="AAPL.US&#10;TSLA.US&#10;700.HK&#10;NVDA.US"
+          />
+          <div className="flex justify-end mt-4">
+            <Button type="submit" icon={<Save className="w-4 h-4" />}>
+              保存列表
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {/* History Sync */}
+      <Card>
+        <CardHeader
+          title="历史 K 线同步"
+          description="从 Longbridge API 同步数据至本地数据库"
+          icon={<Timeline className="w-5 h-5" />}
+        />
+
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <Select
+            label="周期"
+            value={historyPeriod}
+            onChange={(e) => setHistoryPeriod(e.target.value)}
+            options={PERIOD_OPTIONS}
+          />
+          <Select
+            label="复权类型"
+            value={historyAdjust}
+            onChange={(e) => setHistoryAdjust(e.target.value)}
+            options={ADJUST_OPTIONS}
+          />
+          <Input
+            label="数据条数"
+            type="number"
+            value={historyCount}
+            onChange={(e) => setHistoryCount(Number(e.target.value) || 0)}
+            min={1}
+            max={1000}
+          />
+          <Select
+            label="预览股票"
+            value={selectedSymbol}
+            onChange={(e) => setSelectedSymbol(e.target.value)}
+            options={
+              symbolList.length === 0
+                ? [{ value: "", label: "请先保存股票列表" }]
+                : symbolList.map((sym) => ({ value: sym, label: sym }))
+            }
+          />
+        </div>
+
+        <div className="flex gap-3 mb-6">
+          <Button
+            onClick={handleHistorySync}
+            loading={historyLoading}
+            disabled={parsedSymbols.length === 0}
+            icon={<Sync className="w-4 h-4" />}
+          >
+            同步历史数据
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={handleHistoryFetch}
+            loading={historyLoading}
+            disabled={!selectedSymbol}
+            icon={<Visibility className="w-4 h-4" />}
+          >
+            预览最近数据
+          </Button>
+        </div>
+
+        {/* Data Preview */}
+        <div className="bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 p-4 max-h-64 overflow-y-auto">
+          {historyBars.length === 0 ? (
+            <p className="text-slate-500 dark:text-slate-400 text-sm text-center py-4">
+              暂无数据，点击"同步历史数据"并"预览最近数据"查看结果
+            </p>
+          ) : (
+            <div className="space-y-1 font-mono text-sm">
+              <div className="grid grid-cols-6 gap-2 text-xs font-medium text-slate-500 dark:text-slate-400 pb-2 border-b border-slate-200 dark:border-slate-700">
+                <span>时间</span>
+                <span className="text-right">开盘</span>
+                <span className="text-right">最高</span>
+                <span className="text-right">最低</span>
+                <span className="text-right">收盘</span>
+                <span className="text-right">成交量</span>
+              </div>
+              {historyBars.slice(0, 20).map((bar, idx) => (
+                <div
+                  key={idx}
+                  className="grid grid-cols-6 gap-2 py-1.5 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition-colors"
+                >
+                  <span className="text-cyan-600 dark:text-cyan-400">
+                    {new Date(bar.ts).toLocaleDateString()}
+                  </span>
+                  <span className="text-right">{bar.open?.toFixed(2)}</span>
+                  <span className="text-right text-emerald-600 dark:text-emerald-400">
+                    {bar.high?.toFixed(2)}
+                  </span>
+                  <span className="text-right text-red-600 dark:text-red-400">
+                    {bar.low?.toFixed(2)}
+                  </span>
+                  <span className="text-right font-medium">{bar.close?.toFixed(2)}</span>
+                  <span className="text-right text-slate-500">
+                    {(bar.volume / 1000).toFixed(0)}K
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
 
       <StatusSnackbar
         open={snackbar.open}
@@ -584,7 +529,7 @@ export default function SettingsPage() {
         severity={snackbar.severity}
         onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
       />
-      
+
       <ErrorDialog
         open={errorDialog.open}
         error={errorDialog.error}

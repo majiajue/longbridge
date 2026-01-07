@@ -52,7 +52,7 @@ check_backend() {
         echo "✅ 环境配置文件存在"
     fi
 
-    if [ ! -f "backend/.venv/.deps_installed" ]; then
+    if [ ! -f "backend/.venv/.deps_installed" ] || [ "backend/pyproject.toml" -nt "backend/.venv/.deps_installed" ]; then
         echo "📦 安装后端依赖..."
 
         backend/.venv/bin/python -m pip install -U pip
